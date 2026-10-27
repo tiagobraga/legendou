@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Legendas: {{ job.original_name }} | Legendou</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo">
+                <a href="/" class="back-link">← Nova Transcrição</a>
+                <div>
+                    <h1>{{ job.original_name }}</h1>
+                    <p class="subtitle">Tarefa #{{ job.id }} • Criada em {{ job.created_at }}</p>
+                </div>
+            </div>
+            <div id="job-header-status">
+                {% if job.status == 'completed' %}
+                <span class="status-badge status-done">Concluído</span>
+                {% elif job.status == 'failed' %}
+                <span class="status-badge status-err">Erro</span>
+                {% else %}
+                <span class="status-badge status-proc">Processando</span>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <main class="container main-content">
+        <!-- Progress Card (Visible while processing) -->
+        <section id="progress-card" class="card {% if job.status == 'completed' %}hidden{% endif %}">
+            <h2>Processando Áudio e Legendas</h2>
+            <p id="progress-message" class="progress-msg">{{ job.message or 'Iniciando pipeline de processamento...' }}</p>
+            
+            <div class="progress-bar-container">
+                <div id="progress-bar" class="progress-bar" style="width: {{ job.progress or 5 }}%;"></div>
+            </div>
+            <div class="progress-details">
+                <span id="progress-pct">{{ job.progress or 5 }}%</span>
+                <span class="gpu-indicator">⚡ Aceleração GPU NVIDIA RTX 3060</span>
+            </div>
+        </section>
+
+        <!-- Results Card (Visible when completed) -->
+        <section id="results-card" class="card {% if job.status != 'completed' %}hidden{% endif %}">
+            <div class="results-header">
+                <div>
+                    <h2>Legendas Geradas com Sucesso</h2>
+                    <p class="card-desc">Idioma detectado: <strong>{{ languages.get(job.detected_language, job.detected_language) }}</strong></p>
+                </div>
+                <div class="download-actions">
+                    <a id="btn-download-zip" href="/api/jobs/{{ job.id }}/download/{{ job.zip_file }}" class="btn btn-primary" download>
+                        📦 Baixar Pacote Completo (.ZIP)
+                    </a>
+                </div>
+            </div>
+
+            <!-- Media Player Section -->
+            <div class="player-wrapper">
+                <video id="media-player" controls preload="metadata" class="media-player">
+                    <source src="/api/jobs/{{ job.id }}/media">
+                    Seu navegador não suporta reprodução de vídeo/áudio HTML5.
+                </video>
+            </div>
+
+            <!-- Language Tabs -->
+            <div class="lang-tabs-container">
+                <label class="section-label">Selecione o Idioma da Legenda:</label>
+                <div id="lang-buttons" class="tab-buttons">
+                    {% if job.results %}
+                        {% for lang_code, res in job.results.items() %}
+                        <button type="button" class="tab-btn lang-tab-btn {% if loop.first %}active{% endif %}" data-lang="{{ lang_code }}">
+                            🌐 {{ res.name }}
+                        </button>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Subtitle Formats & Downloads for selected language -->
+            <div class="format-toolbar">
+                <div class="view-tabs">
+                    <button type="button" class="view-tab-btn active" data-view="timed-view">⏱️ Transcrição com Horários</button>
+                    <button type="button" class="view-tab-btn" data-view="srt-view">🎬 Formato Legenda (SRT)</button>
+                    <button type="button" class="view-tab-btn" data-view="plain-view">📄 Texto Corrido (Prosa)</button>
+                </div>
+                <div class="file-downloads">
+                    <button type="button" id="btn-copy-text" class="btn btn-sm btn-outline">📋 Copiar Texto</button>
+                    <a id="btn-dl-srt" href="#" class="btn btn-sm btn-outline" download>Baixar .SRT</a>
+                    <a id="btn-dl-vtt" href="#" class="btn btn-sm btn-outline" download>Baixar .VTT</a>
+                    <a id="btn-dl-txt" href="#" class="btn btn-sm btn-outline" download>Baixar .TXT</a>
+                </div>
+            </div>
+
+            <!-- Content Display Area -->
+            <div class="content-display-box">
+                <!-- 1. Timed Transcript View -->
+                <div id="timed-view" class="view-content active">
+                    <pre id="timed-text-content" class="text-content"></pre>
+                </div>
+
+                <!-- 2. SRT View -->
+                <div id="srt-view" class="view-content">
+                    <pre id="srt-text-content" class="text-content"></pre>
+                </div>
+
+                <!-- 3. Plain Text View -->
+                <div id="plain-view" class="view-content">
+                    <div id="plain-text-content" class="plain-text-content"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script id="job-data-json" type="application/json">
+        {{ job | tojson | safe }}
+    </script>
+    <script src="/static/js/job.js"></script>
+</body>
+</html>

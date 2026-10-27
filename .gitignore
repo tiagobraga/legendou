@@ -1,0 +1,29 @@
+# Media files and data
+data/*
+!data/.gitkeep
+*.zip
+*.wav
+*.mp3
+*.mp4
+*.mov
+*.mkv
+*.webm
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# System and editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
