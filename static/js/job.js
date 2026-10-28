@@ -19,9 +19,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnDlSrt = document.getElementById('btn-dl-srt');
     const btnDlVtt = document.getElementById('btn-dl-vtt');
     const btnDlTxt = document.getElementById('btn-dl-txt');
+    const btnDlMp3 = document.getElementById('btn-dl-mp3');
     const btnCopy = document.getElementById('btn-copy-text');
     const btnDlZip = document.getElementById('btn-download-zip');
+    
+    const videoContainer = document.getElementById('video-player-container');
+    const audioContainer = document.getElementById('audio-player-container');
+    const retentionNotice = document.getElementById('media-retention-notice');
+    const deletedNotice = document.getElementById('media-deleted-notice');
     const mediaPlayer = document.getElementById('media-player');
+    const audioPlayer = document.getElementById('audio-player');
+    const metaMediaStatus = document.getElementById('meta-media-status');
 
     let currentJobData = null;
     let activeLanguage = null;
@@ -38,77 +46,116 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderResults(job) {
         if (!job.results || Object.keys(job.results).length === 0) return;
+        const jId = job.id || jobId;
         
-        progressCard.classList.add('hidden');
-        resultsCard.classList.remove('hidden');
-        headerStatus.innerHTML = '<span class="status-badge status-done">Concluído</span>';
-
-        if (job.zip_file) {
-            btnDlZip.href = `/api/jobs/${job.id || jobId}/download/${job.zip_file}`;
+        if (progressCard) progressCard.classList.add('hidden');
+        if (resultsCard) resultsCard.classList.remove('hidden');
+        if (headerStatus) {
+            headerStatus.innerHTML = '<span class="status-badge status-done">Concluído</span>';
         }
-        const btnDlMp3 = document.getElementById('btn-dl-mp3');
-        if (btnDlMp3 && job.mp3_file) {
-            btnDlMp3.href = `/api/jobs/${job.id || jobId}/download/${job.mp3_file}`;
+
+        // ZIP download link
+        if (btnDlZip && job.zip_file) {
+            btnDlZip.href = `/api/jobs/${jId}/download/${job.zip_file}`;
+        }
+
+        // MP3 download button
+        if (btnDlMp3) {
+            if (job.mp3_file) {
+                btnDlMp3.href = `/api/jobs/${jId}/download/${job.mp3_file}`;
+                btnDlMp3.classList.remove('hidden');
+            } else {
+                btnDlMp3.classList.add('hidden');
+            }
+        }
+
+        // Media and notices visibility
+        const hasMedia = (job.media_exists !== false && !job.media_deleted);
+        if (hasMedia) {
+            if (videoContainer) videoContainer.classList.remove('hidden');
+            if (retentionNotice) retentionNotice.classList.remove('hidden');
+            if (audioContainer) audioContainer.classList.add('hidden');
+            if (deletedNotice) deletedNotice.classList.add('hidden');
+            if (metaMediaStatus) {
+                metaMediaStatus.innerHTML = '<span class="status-badge status-proc">Ativa (60 min)</span>';
+            }
+            if (mediaPlayer) {
+                const srcEl = mediaPlayer.querySelector('source');
+                if (srcEl && !srcEl.src.includes(`/api/jobs/${jId}/media`)) {
+                    srcEl.src = `/api/jobs/${jId}/media`;
+                }
+                mediaPlayer.load();
+            }
+        } else {
+            if (videoContainer) videoContainer.classList.add('hidden');
+            if (retentionNotice) retentionNotice.classList.add('hidden');
+            if (deletedNotice) deletedNotice.classList.remove('hidden');
+            if (metaMediaStatus) {
+                metaMediaStatus.innerHTML = '<span class="status-badge status-done">Liberada (60 min)</span>';
+            }
+            if (job.mp3_file && audioContainer) {
+                audioContainer.classList.remove('hidden');
+                if (audioPlayer) {
+                    const srcEl = audioPlayer.querySelector('source');
+                    if (srcEl) srcEl.src = `/api/jobs/${jId}/download/${job.mp3_file}`;
+                    audioPlayer.load();
+                }
+            } else if (audioContainer) {
+                audioContainer.classList.add('hidden');
+            }
         }
 
         // Render language tabs
-        langButtonsContainer.innerHTML = '';
-        const langs = Object.keys(job.results);
-        
-        langs.forEach((langCode, idx) => {
-            const res = job.results[langCode];
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = `tab-btn lang-tab-btn ${idx === 0 ? 'active' : ''}`;
-            btn.dataset.lang = langCode;
-            btn.textContent = `🌐 ${res.name || langCode}`;
+        if (langButtonsContainer) {
+            langButtonsContainer.innerHTML = '';
+            const langs = Object.keys(job.results);
             
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.lang-tab-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                selectLanguage(langCode, job);
+            langs.forEach((langCode, idx) => {
+                const res = job.results[langCode];
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `tab-btn lang-tab-btn ${idx === 0 ? 'active' : ''}`;
+                btn.dataset.lang = langCode;
+                btn.textContent = `🌐 ${res.name || langCode}`;
+                
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.lang-tab-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    selectLanguage(langCode, job);
+                });
+                
+                langButtonsContainer.appendChild(btn);
             });
-            
-            langButtonsContainer.appendChild(btn);
-        });
 
-        // Set up player tracks
-        setupPlayerTracks(job);
+            // Set up player tracks
+            setupPlayerTracks(job);
 
-        // Select first language
-        if (langs.length > 0) {
-            selectLanguage(langs[0], job);
+            // Select first language
+            if (langs.length > 0) {
+                selectLanguage(langs[0], job);
+            }
         }
     }
 
     function setupPlayerTracks(job) {
         if (!mediaPlayer) return;
-        // Remove existing tracks
+        const jId = job.id || jobId;
         const tracks = mediaPlayer.querySelectorAll('track');
         tracks.forEach(t => t.remove());
 
-        // Add track for each language
-        Object.keys(job.results).forEach((langCode, idx) => {
-            const res = job.results[langCode];
-            if (res.files && res.files.vtt) {
-                const track = document.createElement('track');
-                track.kind = 'subtitles';
-                track.label = res.name || langCode;
-                track.srclang = langCode;
-                track.src = `/api/jobs/${job.id || jobId}/download/${res.files.vtt}`;
-                if (idx === 0) track.default = true;
-                mediaPlayer.appendChild(track);
-            }
-        });
-
-        // Ensure video player reloads newly available media source and subtitle tracks
-        if (mediaPlayer.tagName && mediaPlayer.tagName.toLowerCase() === 'video') {
-            const jId = job.id || jobId;
-            const srcEl = mediaPlayer.querySelector('source');
-            if (srcEl && !srcEl.src.includes(`/api/jobs/${jId}/media`)) {
-                srcEl.src = `/api/jobs/${jId}/media`;
-            }
-            mediaPlayer.load();
+        if (job.results) {
+            Object.keys(job.results).forEach((langCode, idx) => {
+                const res = job.results[langCode];
+                if (res.files && res.files.vtt) {
+                    const track = document.createElement('track');
+                    track.kind = 'subtitles';
+                    track.label = res.name || langCode;
+                    track.srclang = langCode;
+                    track.src = `/api/jobs/${jId}/download/${res.files.vtt}`;
+                    if (idx === 0) track.default = true;
+                    mediaPlayer.appendChild(track);
+                }
+            });
         }
     }
 
@@ -134,47 +181,57 @@ document.addEventListener('DOMContentLoaded', () => {
         activeLanguage = langCode;
         const res = job.results[langCode];
         if (!res) return;
+        const jId = job.id || jobId;
 
         // Update downloads
         if (res.files) {
-            if (res.files.srt) btnDlSrt.href = `/api/jobs/${job.id || jobId}/download/${res.files.srt}`;
-            if (res.files.vtt) btnDlVtt.href = `/api/jobs/${job.id || jobId}/download/${res.files.vtt}`;
-            if (res.files.timed_txt) btnDlTxt.href = `/api/jobs/${job.id || jobId}/download/${res.files.timed_txt}`;
+            if (res.files.srt && btnDlSrt) btnDlSrt.href = `/api/jobs/${jId}/download/${res.files.srt}`;
+            if (res.files.vtt && btnDlVtt) btnDlVtt.href = `/api/jobs/${jId}/download/${res.files.vtt}`;
+            if (res.files.timed_txt && btnDlTxt) btnDlTxt.href = `/api/jobs/${jId}/download/${res.files.timed_txt}`;
         }
 
         // Render views from segments
         const segs = res.segments || [];
         
-        // 1. Timed
+        // 1. Timed (Minutagem / Ata com Identificação de Locutores: [Pessoa 1], [Pessoa 2])
         let timedStr = '';
+        let currentSpeaker = null;
         segs.forEach(s => {
+            const speaker = s.speaker || 'Pessoa 1';
+            if (speaker !== currentSpeaker) {
+                if (timedStr.length > 0) timedStr += '\n';
+                timedStr += `[${speaker}]\n`;
+                currentSpeaker = speaker;
+            }
             timedStr += `[${formatShortTime(s.start)}] ${s.text}\n`;
         });
-        timedContent.textContent = timedStr;
+        if (timedContent) timedContent.textContent = timedStr;
 
         // 2. SRT
         let srtStr = '';
         segs.forEach((s, idx) => {
             srtStr += `${idx + 1}\n${formatSrtTimestamp(s.start)} --> ${formatSrtTimestamp(s.end)}\n${s.text}\n\n`;
         });
-        srtContent.textContent = srtStr;
+        if (srtContent) srtContent.textContent = srtStr;
 
         // 3. Plain
-        plainContent.innerHTML = '';
-        let para = [];
-        segs.forEach(s => {
-            para.push(s.text);
-            if (/[.!?]$/.test(s.text.trim()) && para.length >= 3) {
+        if (plainContent) {
+            plainContent.innerHTML = '';
+            let para = [];
+            segs.forEach(s => {
+                para.push(s.text);
+                if (/[.!?]$/.test(s.text.trim()) && para.length >= 3) {
+                    const p = document.createElement('p');
+                    p.textContent = para.join(' ');
+                    plainContent.appendChild(p);
+                    para = [];
+                }
+            });
+            if (para.length > 0) {
                 const p = document.createElement('p');
                 p.textContent = para.join(' ');
                 plainContent.appendChild(p);
-                para = [];
             }
-        });
-        if (para.length > 0) {
-            const p = document.createElement('p');
-            p.textContent = para.join(' ');
-            plainContent.appendChild(p);
         }
     }
 
@@ -225,12 +282,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = JSON.parse(e.data);
                 currentJobData = data;
 
-                if (data.progress !== undefined) {
+                if (data.progress !== undefined && progressBar && progressPct) {
                     progressBar.style.width = `${data.progress}%`;
                     progressPct.textContent = `${data.progress}%`;
                 }
 
-                if (data.message) {
+                if (data.message && progressMsg) {
                     progressMsg.textContent = data.message;
                 }
 
@@ -240,9 +297,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderResults(fullJob);
                 } else if (data.status === 'failed') {
                     evtSource.close();
-                    headerStatus.innerHTML = '<span class="status-badge status-err">Erro</span>';
-                    progressMsg.textContent = data.message || 'Falha no processamento.';
-                    progressMsg.style.color = 'var(--accent-danger)';
+                    if (headerStatus) {
+                        headerStatus.innerHTML = '<span class="status-badge status-err">Erro</span>';
+                    }
+                    if (progressMsg) {
+                        progressMsg.textContent = data.message || 'Falha no processamento.';
+                        progressMsg.style.color = 'var(--accent-danger)';
+                    }
                 }
             } catch (err) {
                 console.error("Erro ao processar evento SSE:", err);

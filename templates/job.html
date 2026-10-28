@@ -116,7 +116,7 @@
             </div>
             <div class="metadata-item">
               <span class="metadata-label">💾 Mídia no Servidor</span>
-              <span class="metadata-value">
+              <span id="meta-media-status" class="metadata-value">
                 {% if media_exists %}
                 <span class="status-badge status-proc">Ativa (60 min)</span>
                 {% else %}
@@ -127,37 +127,37 @@
           </div>
         </div>
 
-        <!-- Media Player Section (Only shown if media file still exists) -->
-        {% if media_exists %}
-        <div class="player-container">
-          <video id="media-player" controls preload="metadata" class="media-player">
-            <source src="/api/jobs/{{ job.id }}/media">
-            Seu navegador não suporta reprodução HTML5 de áudio/vídeo.
-          </video>
-        </div>
-        <div class="media-notice retention-info">
-          <span>⏱️ <strong>Vídeo disponível temporariamente:</strong> A mídia original permanece disponível para visualização e conferência por 60 minutos após o término da conversão, sendo removida em seguida para liberar espaço em disco.</span>
-        </div>
-        {% elif job.mp3_file %}
-        <!-- Audio Player caso o MP3 tenha sido gerado -->
-        <div class="audio-player-box">
-          <div class="audio-player-header">
-            <span>🎵 <strong>Áudio MP3 Gerado:</strong> Ouça a gravação completa abaixo:</span>
+        <!-- Media Player / Audio Player / Retention Notices -->
+        <div id="media-player-wrapper">
+          <!-- Video Player Container -->
+          <div id="video-player-container" class="player-container {% if not media_exists %}hidden{% endif %}">
+            <video id="media-player" controls preload="metadata" class="media-player">
+              <source src="/api/jobs/{{ job.id }}/media">
+              Seu navegador não suporta reprodução HTML5 de áudio/vídeo.
+            </video>
           </div>
-          <audio id="media-player" controls class="clean-audio-player">
-            <source src="/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}">
-            Seu navegador não suporta reprodução de áudio.
-          </audio>
+
+          <!-- Audio Player Container -->
+          <div id="audio-player-container" class="audio-player-box {% if media_exists or not job.mp3_file %}hidden{% endif %}">
+            <div class="audio-player-header">
+              <span>🎵 <strong>Áudio MP3 Gerado:</strong> Ouça a gravação completa abaixo:</span>
+            </div>
+            <audio id="audio-player" controls class="clean-audio-player">
+              <source src="{% if job.mp3_file %}/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}{% endif %}">
+              Seu navegador não suporta reprodução de áudio.
+            </audio>
+          </div>
+
+          <!-- Retention Active Notice (when original video is still on server) -->
+          <div id="media-retention-notice" class="media-notice retention-info {% if not media_exists %}hidden{% endif %}">
+            <span>⏱️ <strong>Vídeo disponível temporariamente:</strong> A mídia original permanece disponível para visualização e conferência por 60 minutos após o término da conversão, sendo removida em seguida para liberar espaço em disco.</span>
+          </div>
+
+          <!-- Retention Ended / Deletion Notice (exact text requested by user) -->
+          <div id="media-deleted-notice" class="media-notice deleted-info {% if media_exists %}hidden{% endif %}">
+            <span>ℹ️ Os arquivos são mantidos no servidor por 60 minutos para verificação da legenda e então removidos de forma definitiva automaticamente. Todas as legendas e transcrições completas continuam preservadas e disponíveis para consulta e download abaixo.</span>
+          </div>
         </div>
-        <div class="media-notice deleted-info">
-          <span>ℹ️ O vídeo original foi removido automaticamente para liberação de armazenamento (política de 60 minutos). O áudio MP3 e todas as legendas permanecem salvos e disponíveis para download.</span>
-        </div>
-        {% else %}
-        <!-- Mensagem quando a mídia original já expirou e foi excluída -->
-        <div class="media-notice deleted-info">
-          <span>ℹ️ O arquivo de vídeo original foi removido automaticamente para liberação de armazenamento (política de 60 minutos após a transcrição). Todas as legendas e transcrições completas continuam preservadas e disponíveis para consulta e download abaixo.</span>
-        </div>
-        {% endif %}
 
         <!-- Language Selector Tabs -->
         <div class="form-group" style="margin-top: 1.5rem;">
@@ -202,11 +202,9 @@
             <a id="btn-dl-txt" href="#" class="btn btn-outline btn-sm" download>
               <span>Baixar .TXT</span>
             </a>
-            {% if job.mp3_file %}
-            <a id="btn-dl-mp3" href="/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}" class="btn btn-outline btn-sm" style="font-weight: 700; color: var(--color-primary); border-color: var(--color-primary);" download>
-              <span>🎵 Baixar MP3</span>
+            <a id="btn-dl-mp3" href="{% if job.mp3_file %}/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}{% else %}#{% endif %}" class="btn btn-outline btn-sm {% if not job.mp3_file %}hidden{% endif %}" style="font-weight: 700; color: var(--color-primary); border-color: var(--color-primary);" download>
+              <span>🎵 Baixar .MP3</span>
             </a>
-            {% endif %}
           </div>
         </div>
 
@@ -238,6 +236,6 @@
   <script id="job-data-json" type="application/json">
     {{ job | tojson | safe }}
   </script>
-  <script src="/static/js/job.js?v=20261028"></script>
+  <script src="/static/js/job.js?v=20261028_v2"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@ from config import (
 from services.downloader import download_media
 from services.audio import extract_and_convert_audio, convert_to_mp3
 from services.transcriber import transcribe_audio
+from services.diarizer import identify_speakers
 from services.translator import translate_segments
 from services.subtitle_writer import write_subtitle_files, create_zip_bundle
 
@@ -119,23 +120,25 @@ def cleanup_expired_media(max_age_seconds: int = 3600):
                 pass
 
         # 2. Checar idade para remoção do vídeo original (60 min)
+        # Só remove se o job já completou com sucesso há mais de max_age_seconds
         completed_ts = data.get("completed_timestamp")
-        if not completed_ts and data.get("status") in ["completed", "failed"]:
+        if not completed_ts and data.get("status") == "completed":
             try:
                 completed_ts = job_dir.stat().st_mtime
             except Exception:
                 completed_ts = None
 
         if completed_ts and (now - completed_ts) >= max_age_seconds:
-            # Excluir mídias originais pesadas
+            deleted_any = False
             for p in list(job_dir.iterdir()):
                 if p.is_file() and p.suffix.lower() in [".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv"]:
                     try:
                         p.unlink()
+                        deleted_any = True
                     except Exception as e:
                         print(f"Erro ao deletar vídeo expirado {p}: {e}")
 
-            if not data.get("media_deleted"):
+            if deleted_any or not data.get("media_deleted"):
                 data["media_deleted"] = True
                 data["media_deleted_at"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 if meta_path.exists():
@@ -146,16 +149,15 @@ def cleanup_expired_media(max_age_seconds: int = 3600):
                         pass
                 if data.get("id") in JOBS:
                     JOBS[data["id"]]["media_deleted"] = True
+                    JOBS[data["id"]]["media_exists"] = False
 
 @app.on_event("startup")
 async def startup_event():
-    # Executa a limpeza na inicialização
     try:
         cleanup_expired_media(3600)
     except Exception as e:
         print(f"Aviso na limpeza inicial: {e}")
 
-    # Tarefa de fundo periódica (a cada 3 minutos)
     async def periodic_cleanup():
         while True:
             await asyncio.sleep(180)
@@ -210,6 +212,8 @@ async def process_job(
         file_size_formatted = format_file_size(file_size_bytes)
 
         JOBS[job_id]["media_filename"] = media_path.name
+        JOBS[job_id]["media_exists"] = True
+        JOBS[job_id]["media_deleted"] = False
         JOBS[job_id]["file_size_bytes"] = file_size_bytes
         JOBS[job_id]["file_size_formatted"] = file_size_formatted
         JOBS[job_id]["output_formats"] = output_formats
@@ -225,7 +229,7 @@ async def process_job(
 
         loop = asyncio.get_event_loop()
         def transcribe_cb(data):
-            pct = 30 + int(data.get("progress_percent", 0) * 0.4)
+            pct = 30 + int(data.get("progress_percent", 0) * 0.3)
             asyncio.run_coroutine_threadsafe(
                 notify_job(job_id, {
                     "status": "transcribing",
@@ -254,6 +258,19 @@ async def process_job(
             except Exception as e:
                 print(f"Aviso ao remover wav: {e}")
 
+        # 4. Identificação de locutores para Minutagem/Ata
+        await notify_job(job_id, {
+            "status": "diarizing",
+            "progress": 62,
+            "message": "Identificando locutores da reunião/fala ([Pessoa 1], [Pessoa 2])..."
+        })
+        try:
+            segments = await identify_speakers(segments)
+        except Exception as e:
+            print(f"Aviso na diarização: {e}")
+            for s in segments:
+                s["speaker"] = "Pessoa 1"
+
         duration_seconds = segments[-1]["end"] if segments else 0.0
         duration_formatted = format_duration(duration_seconds)
         JOBS[job_id]["duration_seconds"] = duration_seconds
@@ -274,7 +291,7 @@ async def process_job(
             "segments": segments
         }
 
-        # 4. Translations
+        # 5. Translations
         langs_to_translate = [l for l in target_langs if l.lower() != effective_source_lang.lower()]
         if langs_to_translate:
             total_langs = len(langs_to_translate)
@@ -299,7 +316,7 @@ async def process_job(
                     "segments": t_segments
                 }
 
-        # 5. Converter para MP3 se selecionado
+        # 6. Converter para MP3 se selecionado
         mp3_file = None
         if "mp3" in [f.lower() for f in output_formats]:
             await notify_job(job_id, {
@@ -313,7 +330,7 @@ async def process_job(
             mp3_file = mp3_name
             JOBS[job_id]["mp3_file"] = mp3_file
 
-        # 6. Create ZIP Bundle (incluindo legendas e MP3 se gerado)
+        # 7. Create ZIP Bundle (limpo, sem arquivos .json)
         zip_path = create_zip_bundle(job_dir, f"legendas_{base_name}.zip")
         
         elapsed_seconds = round(time.time() - start_time, 1)
@@ -330,6 +347,8 @@ async def process_job(
             "results": sub_results,
             "zip_file": zip_path.name,
             "mp3_file": mp3_file,
+            "media_exists": media_path.exists(),
+            "media_deleted": False,
             "file_size_formatted": file_size_formatted,
             "duration_formatted": duration_formatted,
             "processing_time_formatted": processing_time_formatted,
@@ -406,6 +425,8 @@ async def create_job(
         "original_name": original_name if not media_url else media_url.split("/")[-1],
         "status": "queued",
         "progress": 0,
+        "media_exists": bool(uploaded_path and uploaded_path.exists()),
+        "media_deleted": False,
         "message": "Tarefa criada e enfileirada."
     }
     save_job_state(job_id)
@@ -435,9 +456,9 @@ async def job_detail_page(request: Request, job_id: str):
         else:
             raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
 
-    # Verifica se a mídia física original ainda existe no disco
+    # Verifica existência física do arquivo de mídia original
     media_exists = False
-    if job.get("media_filename"):
+    if job.get("media_filename") and not job.get("media_deleted"):
         media_path = DATA_DIR / job_id / job["media_filename"]
         media_exists = media_path.exists()
     job["media_exists"] = media_exists

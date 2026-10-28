@@ -95,6 +95,7 @@ async def translate_segments(
                         "id": s["id"],
                         "start": s["start"],
                         "end": s["end"],
+                        "speaker": s.get("speaker", "Pessoa 1"),
                         "text": trans_map.get(s["id"], trans_map.get(str(s["id"]), s["text"]))
                     })
             except Exception as e:
@@ -104,6 +105,7 @@ async def translate_segments(
                         "id": s["id"],
                         "start": s["start"],
                         "end": s["end"],
+                        "speaker": s.get("speaker", "Pessoa 1"),
                         "text": s["text"]
                     })
 
