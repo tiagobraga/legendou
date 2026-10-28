@@ -86,6 +86,6 @@ def create_zip_bundle(output_dir: Path, zip_name: str = "legendas_completas.zip"
     zip_path = output_dir / zip_name
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         for file in output_dir.glob("*"):
-            if file.is_file() and file.name != zip_name and file.suffix in [".srt", ".vtt", ".txt", ".json"]:
+            if file.is_file() and file.name != zip_name and file.suffix.lower() in [".srt", ".vtt", ".txt", ".json", ".mp3"]:
                 zipf.write(file, arcname=file.name)
     return zip_path

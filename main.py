@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import time
 import shutil
 import asyncio
 from pathlib import Path
@@ -17,7 +18,7 @@ from config import (
     DEFAULT_WHISPER_MODEL, DEFAULT_DEVICE
 )
 from services.downloader import download_media
-from services.audio import extract_and_convert_audio
+from services.audio import extract_and_convert_audio, convert_to_mp3
 from services.transcriber import transcribe_audio
 from services.translator import translate_segments
 from services.subtitle_writer import write_subtitle_files, create_zip_bundle
@@ -32,6 +33,34 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 JOBS: Dict[str, Dict[str, Any]] = {}
 JOB_QUEUES: Dict[str, List[asyncio.Queue]] = {}
 
+def format_file_size(size_bytes: int) -> str:
+    if size_bytes >= 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024**3):.2f} GB"
+    elif size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024**2):.1f} MB"
+    elif size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes} B"
+
+def format_duration(seconds: float) -> str:
+    secs = int(round(seconds))
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    s = secs % 60
+    if h > 0:
+        return f"{h}h {m:02d}m {s:02d}s"
+    elif m > 0:
+        return f"{m}m {s:02d}s"
+    return f"{s}s"
+
+def format_elapsed(seconds: float) -> str:
+    secs = int(round(seconds))
+    if secs < 60:
+        return f"{secs} segundos"
+    m = secs // 60
+    s = secs % 60
+    return f"{m}m {s}s"
+
 def get_job_file(job_id: str) -> Path:
     return DATA_DIR / job_id / "job.json"
 
@@ -42,7 +71,6 @@ def save_job_state(job_id: str):
     job_dir = DATA_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     with open(job_dir / "job.json", "w", encoding="utf-8") as f:
-        # Save a clean copy without non-serializable objects
         clean_copy = {k: v for k, v in job.items() if k not in ["queues"]}
         json.dump(clean_copy, f, ensure_ascii=False, indent=2)
 
@@ -62,6 +90,81 @@ def load_past_jobs() -> List[Dict[str, Any]]:
                     pass
     return past_jobs
 
+def cleanup_expired_media(max_age_seconds: int = 3600):
+    """
+    Remove arquivos de áudio WAV temporários e exclui os vídeos originais
+    com mais de 60 minutos (3600s) após a conversão para liberar espaço em disco.
+    """
+    if not DATA_DIR.exists():
+        return
+    now = time.time()
+    for job_dir in DATA_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        meta_path = job_dir / "job.json"
+        data = {}
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as jf:
+                    data = json.load(jf)
+            except Exception:
+                data = {}
+
+        # 1. Deletar qualquer WAV intermediário imediatamente
+        wav_file = job_dir / "audio_extracted.wav"
+        if wav_file.exists():
+            try:
+                wav_file.unlink()
+            except Exception:
+                pass
+
+        # 2. Checar idade para remoção do vídeo original (60 min)
+        completed_ts = data.get("completed_timestamp")
+        if not completed_ts and data.get("status") in ["completed", "failed"]:
+            try:
+                completed_ts = job_dir.stat().st_mtime
+            except Exception:
+                completed_ts = None
+
+        if completed_ts and (now - completed_ts) >= max_age_seconds:
+            # Excluir mídias originais pesadas
+            for p in list(job_dir.iterdir()):
+                if p.is_file() and p.suffix.lower() in [".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv"]:
+                    try:
+                        p.unlink()
+                    except Exception as e:
+                        print(f"Erro ao deletar vídeo expirado {p}: {e}")
+
+            if not data.get("media_deleted"):
+                data["media_deleted"] = True
+                data["media_deleted_at"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                if meta_path.exists():
+                    try:
+                        with open(meta_path, "w", encoding="utf-8") as jf:
+                            json.dump(data, jf, ensure_ascii=False, indent=2)
+                    except Exception:
+                        pass
+                if data.get("id") in JOBS:
+                    JOBS[data["id"]]["media_deleted"] = True
+
+@app.on_event("startup")
+async def startup_event():
+    # Executa a limpeza na inicialização
+    try:
+        cleanup_expired_media(3600)
+    except Exception as e:
+        print(f"Aviso na limpeza inicial: {e}")
+
+    # Tarefa de fundo periódica (a cada 3 minutos)
+    async def periodic_cleanup():
+        while True:
+            await asyncio.sleep(180)
+            try:
+                cleanup_expired_media(3600)
+            except Exception as e:
+                print(f"Aviso na limpeza periódica: {e}")
+    asyncio.create_task(periodic_cleanup())
+
 async def notify_job(job_id: str, event_data: dict):
     if "id" not in event_data:
         event_data["id"] = job_id
@@ -78,9 +181,12 @@ async def process_job(
     uploaded_file_path: Optional[Path] = None,
     source_lang: Optional[str] = None,
     target_langs: List[str] = None,
+    output_formats: Optional[List[str]] = None,
     model_size: str = DEFAULT_WHISPER_MODEL
 ):
     target_langs = target_langs or []
+    output_formats = output_formats or ["timed", "srt", "plain"]
+    start_time = time.time()
     job_dir = DATA_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
@@ -100,20 +206,26 @@ async def process_job(
         else:
             raise ValueError("Nenhum link ou arquivo fornecido.")
 
+        file_size_bytes = media_path.stat().st_size
+        file_size_formatted = format_file_size(file_size_bytes)
+
         JOBS[job_id]["media_filename"] = media_path.name
+        JOBS[job_id]["file_size_bytes"] = file_size_bytes
+        JOBS[job_id]["file_size_formatted"] = file_size_formatted
+        JOBS[job_id]["output_formats"] = output_formats
         save_job_state(job_id)
 
-        # 2. Extract Audio
-        await notify_job(job_id, {"status": "extracting_audio", "progress": 25, "message": "Extraindo e normalizando áudio via FFmpeg..."})
+        # 2. Extract Audio for Whisper
+        await notify_job(job_id, {"status": "extracting_audio", "progress": 20, "message": "Extraindo e normalizando áudio via FFmpeg..."})
         wav_path = job_dir / "audio_extracted.wav"
         await extract_and_convert_audio(media_path, wav_path)
 
         # 3. Transcribe via Whisper
-        await notify_job(job_id, {"status": "transcribing", "progress": 35, "message": f"Iniciando transcrição com Whisper ({model_size}) na GPU..."})
+        await notify_job(job_id, {"status": "transcribing", "progress": 30, "message": f"Iniciando transcrição com Whisper ({model_size}) na GPU..."})
 
         loop = asyncio.get_event_loop()
         def transcribe_cb(data):
-            pct = 35 + int(data.get("progress_percent", 0) * 0.4)
+            pct = 30 + int(data.get("progress_percent", 0) * 0.4)
             asyncio.run_coroutine_threadsafe(
                 notify_job(job_id, {
                     "status": "transcribing",
@@ -134,6 +246,18 @@ async def process_job(
                 progress_callback=transcribe_cb
             )
         )
+
+        # OPÇÃO 1: Excluir o áudio WAV intermediário imediatamente após a transcrição
+        if wav_path.exists():
+            try:
+                wav_path.unlink()
+            except Exception as e:
+                print(f"Aviso ao remover wav: {e}")
+
+        duration_seconds = segments[-1]["end"] if segments else 0.0
+        duration_formatted = format_duration(duration_seconds)
+        JOBS[job_id]["duration_seconds"] = duration_seconds
+        JOBS[job_id]["duration_formatted"] = duration_formatted
 
         effective_source_lang = source_lang if (source_lang and source_lang != "auto") else detected_lang
         JOBS[job_id]["detected_language"] = detected_lang
@@ -158,7 +282,7 @@ async def process_job(
                 t_name = SUPPORTED_LANGUAGES.get(t_lang, t_lang)
                 await notify_job(job_id, {
                     "status": "translating",
-                    "progress": 75 + int((idx_l / total_langs) * 20),
+                    "progress": 70 + int((idx_l / total_langs) * 15),
                     "message": f"Traduzindo legendas para {t_name}..."
                 })
                 
@@ -175,9 +299,28 @@ async def process_job(
                     "segments": t_segments
                 }
 
-        # 5. Create ZIP Bundle
+        # 5. Converter para MP3 se selecionado
+        mp3_file = None
+        if "mp3" in [f.lower() for f in output_formats]:
+            await notify_job(job_id, {
+                "status": "converting_mp3",
+                "progress": 90,
+                "message": "Gerando arquivo de áudio MP3 (192kbps)..."
+            })
+            mp3_name = f"{base_name}.mp3"
+            mp3_path = job_dir / mp3_name
+            await convert_to_mp3(media_path, mp3_path)
+            mp3_file = mp3_name
+            JOBS[job_id]["mp3_file"] = mp3_file
+
+        # 6. Create ZIP Bundle (incluindo legendas e MP3 se gerado)
         zip_path = create_zip_bundle(job_dir, f"legendas_{base_name}.zip")
         
+        elapsed_seconds = round(time.time() - start_time, 1)
+        processing_time_formatted = format_elapsed(elapsed_seconds)
+        completed_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        completed_ts = time.time()
+
         # Complete
         await notify_job(job_id, {
             "id": job_id,
@@ -186,13 +329,20 @@ async def process_job(
             "message": "Processamento concluído com sucesso!",
             "results": sub_results,
             "zip_file": zip_path.name,
-            "completed_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            "mp3_file": mp3_file,
+            "file_size_formatted": file_size_formatted,
+            "duration_formatted": duration_formatted,
+            "processing_time_formatted": processing_time_formatted,
+            "elapsed_seconds": elapsed_seconds,
+            "completed_at": completed_at,
+            "completed_timestamp": completed_ts
         })
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         await notify_job(job_id, {
+            "id": job_id,
             "status": "failed",
             "progress": 100,
             "message": f"Erro durante o processamento: {str(e)}"
@@ -226,6 +376,7 @@ async def create_job(
     media_url: Optional[str] = Form(None),
     source_language: str = Form("auto"),
     target_languages: List[str] = Form([]),
+    output_formats: List[str] = Form(["timed", "srt", "plain"]),
     model_size: str = Form(DEFAULT_WHISPER_MODEL),
     file: Optional[UploadFile] = File(None)
 ):
@@ -250,6 +401,7 @@ async def create_job(
         "media_url": media_url,
         "source_language": source_language,
         "target_languages": target_languages,
+        "output_formats": output_formats,
         "model_size": model_size,
         "original_name": original_name if not media_url else media_url.split("/")[-1],
         "status": "queued",
@@ -265,6 +417,7 @@ async def create_job(
         uploaded_file_path=uploaded_path,
         source_lang=source_language,
         target_langs=target_languages,
+        output_formats=output_formats,
         model_size=model_size
     )
 
@@ -281,12 +434,20 @@ async def job_detail_page(request: Request, job_id: str):
                 JOBS[job_id] = job
         else:
             raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
-            
+
+    # Verifica se a mídia física original ainda existe no disco
+    media_exists = False
+    if job.get("media_filename"):
+        media_path = DATA_DIR / job_id / job["media_filename"]
+        media_exists = media_path.exists()
+    job["media_exists"] = media_exists
+
     return templates.TemplateResponse(
         request=request,
         name="job.html",
         context={
             "job": job,
+            "media_exists": media_exists,
             "languages": SUPPORTED_LANGUAGES
         }
     )
@@ -348,5 +509,5 @@ async def stream_job_media(job_id: str):
         raise HTTPException(status_code=404, detail="Mídia não encontrada.")
     media_path = DATA_DIR / job_id / job["media_filename"]
     if not media_path.exists():
-        raise HTTPException(status_code=404, detail="Arquivo de mídia físico não encontrado.")
+        raise HTTPException(status_code=410, detail="Mídia original expirada e removida (política de 60 minutos).")
     return FileResponse(media_path)

@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261027">
-  <link rel="icon" type="image/png" href="/static/favicon.png?v=20261027">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261028">
+  <link rel="icon" type="image/png" href="/static/favicon.png?v=20261028">
 </head>
 <body data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
   <!-- Top Accent Bar (Biblió / Arquivô style) -->
@@ -60,7 +60,7 @@
             <div id="progress-bar" class="progress-bar-fill" style="width: {{ job.progress or 5 }}%;"></div>
           </div>
           <div class="progress-footer">
-            <span>Pipeline: Download → FFmpeg → Faster-Whisper → Ollama</span>
+            <span>Pipeline: Ingestão → FFmpeg → Whisper CUDA → Tradução Ollama</span>
             <span class="gpu-tag">⚡ Aceleração GPU NVIDIA RTX 3060</span>
           </div>
         </div>
@@ -82,16 +82,85 @@
           </div>
         </div>
 
-        <!-- Integrated HTML5 Player -->
+        <!-- Conversion Metadata Panel -->
+        <div class="metadata-panel">
+          <h3 class="metadata-title">📊 Metadados da Conversão</h3>
+          <div class="metadata-grid">
+            <div class="metadata-item">
+              <span class="metadata-label">📁 Arquivo</span>
+              <span class="metadata-value" title="{{ job.original_name }}">{{ job.original_name }}</span>
+            </div>
+            <div class="metadata-item">
+              <span class="metadata-label">🗓️ Concluído em</span>
+              <span class="metadata-value">{{ job.completed_at or job.created_at }}</span>
+            </div>
+            <div class="metadata-item">
+              <span class="metadata-label">📦 Tamanho</span>
+              <span class="metadata-value">{{ job.file_size_formatted or (job.media_filename if media_exists else 'Liberado do disco') }}</span>
+            </div>
+            <div class="metadata-item">
+              <span class="metadata-label">⏱️ Duração</span>
+              <span class="metadata-value">{{ job.duration_formatted or 'Concluído' }}</span>
+            </div>
+            <div class="metadata-item">
+              <span class="metadata-label">⚡ Tempo Gasto</span>
+              <span class="metadata-value">{{ job.processing_time_formatted or '< 30s' }}</span>
+            </div>
+            <div class="metadata-item">
+              <span class="metadata-label">🧠 Modelo</span>
+              <span class="metadata-value">{{ job.model_size or 'large-v3' }}</span>
+            </div>
+            <div class="metadata-item">
+              <span class="metadata-label">🌐 Idioma</span>
+              <span class="metadata-value">{{ languages.get(job.detected_language, job.detected_language or 'Automático') }}</span>
+            </div>
+            <div class="metadata-item">
+              <span class="metadata-label">💾 Mídia no Servidor</span>
+              <span class="metadata-value">
+                {% if media_exists %}
+                <span class="status-badge status-proc">Ativa (60 min)</span>
+                {% else %}
+                <span class="status-badge status-done">Liberada (60 min)</span>
+                {% endif %}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Media Player Section (Only shown if media file still exists) -->
+        {% if media_exists %}
         <div class="player-container">
           <video id="media-player" controls preload="metadata" class="media-player">
             <source src="/api/jobs/{{ job.id }}/media">
             Seu navegador não suporta reprodução HTML5 de áudio/vídeo.
           </video>
         </div>
+        <div class="media-notice retention-info">
+          <span>⏱️ <strong>Vídeo disponível temporariamente:</strong> A mídia original permanece disponível para visualização e conferência por 60 minutos após o término da conversão, sendo removida em seguida para liberar espaço em disco.</span>
+        </div>
+        {% elif job.mp3_file %}
+        <!-- Audio Player caso o MP3 tenha sido gerado -->
+        <div class="audio-player-box">
+          <div class="audio-player-header">
+            <span>🎵 <strong>Áudio MP3 Gerado:</strong> Ouça a gravação completa abaixo:</span>
+          </div>
+          <audio id="media-player" controls class="clean-audio-player">
+            <source src="/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}">
+            Seu navegador não suporta reprodução de áudio.
+          </audio>
+        </div>
+        <div class="media-notice deleted-info">
+          <span>ℹ️ O vídeo original foi removido automaticamente para liberação de armazenamento (política de 60 minutos). O áudio MP3 e todas as legendas permanecem salvos e disponíveis para download.</span>
+        </div>
+        {% else %}
+        <!-- Mensagem quando a mídia original já expirou e foi excluída -->
+        <div class="media-notice deleted-info">
+          <span>ℹ️ O arquivo de vídeo original foi removido automaticamente para liberação de armazenamento (política de 60 minutos após a transcrição). Todas as legendas e transcrições completas continuam preservadas e disponíveis para consulta e download abaixo.</span>
+        </div>
+        {% endif %}
 
         <!-- Language Selector Tabs -->
-        <div class="form-group">
+        <div class="form-group" style="margin-top: 1.5rem;">
           <label style="font-size: 0.95rem; font-weight: 700; color: var(--color-brand-title);">
             Selecione o Idioma da Legenda:
           </label>
@@ -133,6 +202,11 @@
             <a id="btn-dl-txt" href="#" class="btn btn-outline btn-sm" download>
               <span>Baixar .TXT</span>
             </a>
+            {% if job.mp3_file %}
+            <a id="btn-dl-mp3" href="/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}" class="btn btn-outline btn-sm" style="font-weight: 700; color: var(--color-primary); border-color: var(--color-primary);" download>
+              <span>🎵 Baixar MP3</span>
+            </a>
+            {% endif %}
           </div>
         </div>
 
@@ -164,6 +238,6 @@
   <script id="job-data-json" type="application/json">
     {{ job | tojson | safe }}
   </script>
-  <script src="/static/js/job.js?v=20261027"></script>
+  <script src="/static/js/job.js?v=20261028"></script>
 </body>
 </html>

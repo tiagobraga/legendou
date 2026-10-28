@@ -46,6 +46,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (job.zip_file) {
             btnDlZip.href = `/api/jobs/${job.id || jobId}/download/${job.zip_file}`;
         }
+        const btnDlMp3 = document.getElementById('btn-dl-mp3');
+        if (btnDlMp3 && job.mp3_file) {
+            btnDlMp3.href = `/api/jobs/${job.id || jobId}/download/${job.mp3_file}`;
+        }
 
         // Render language tabs
         langButtonsContainer.innerHTML = '';
@@ -97,13 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Ensure player reloads newly available media source and subtitle tracks
-        const jId = job.id || jobId;
-        const srcEl = mediaPlayer.querySelector('source');
-        if (srcEl && !srcEl.src.includes(`/api/jobs/${jId}/media`)) {
-            srcEl.src = `/api/jobs/${jId}/media`;
+        // Ensure video player reloads newly available media source and subtitle tracks
+        if (mediaPlayer.tagName && mediaPlayer.tagName.toLowerCase() === 'video') {
+            const jId = job.id || jobId;
+            const srcEl = mediaPlayer.querySelector('source');
+            if (srcEl && !srcEl.src.includes(`/api/jobs/${jId}/media`)) {
+                srcEl.src = `/api/jobs/${jId}/media`;
+            }
+            mediaPlayer.load();
         }
-        mediaPlayer.load();
     }
 
     function formatShortTime(seconds) {

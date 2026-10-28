@@ -114,6 +114,30 @@
             <span class="help-text">O sistema sempre preserva o áudio original transcrito e gera versões traduzidas automaticamente com sincronização temporal idêntica.</span>
           </div>
 
+          <!-- Formatos de saída -->
+          <div class="form-group">
+            <label>Formatos de saída:</label>
+            <div class="checkbox-grid">
+              <label class="checkbox-label">
+                <input type="checkbox" name="output_formats" value="timed" checked>
+                <span>⏱️ Minutagem/Ata</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="output_formats" value="srt" checked>
+                <span>🎬 SRT</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="output_formats" value="plain" checked>
+                <span>📄 Texto corrido</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="output_formats" value="mp3">
+                <span>🎵 MP3</span>
+              </label>
+            </div>
+            <span class="help-text">Selecione os arquivos gerados. A opção MP3 extrai e disponibiliza o áudio completo do vídeo para você ouvir depois.</span>
+          </div>
+
           <div class="form-actions">
             <button type="submit" id="submit-btn" class="btn btn-primary">
               <span>⚡ Iniciar Transcrição e Legendagem</span>
