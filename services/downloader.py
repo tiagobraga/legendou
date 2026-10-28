@@ -70,6 +70,8 @@ async def download_with_ytdlp(
         "yt-dlp",
         "--no-playlist",
         "-f", "bestaudio/best",
+        "--embed-metadata",
+        "--write-info-json",
         "-o", out_template,
         url
     ]

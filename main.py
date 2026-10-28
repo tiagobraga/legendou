@@ -326,7 +326,13 @@ async def process_job(
             })
             mp3_name = f"{base_name}.mp3"
             mp3_path = job_dir / mp3_name
-            await convert_to_mp3(media_path, mp3_path)
+            extra_meta = {
+                "title": JOBS[job_id].get("original_name") or base_name,
+                "comment": f"Tarefa #{job_id} • Legendou (curio.ia.br)"
+            }
+            if JOBS[job_id].get("media_url"):
+                extra_meta["comment"] = f"Fonte: {JOBS[job_id]['media_url']} • Legendou (curio.ia.br)"
+            await convert_to_mp3(media_path, mp3_path, extra_metadata=extra_meta)
             mp3_file = mp3_name
             JOBS[job_id]["mp3_file"] = mp3_file
 

@@ -50,10 +50,11 @@ def transcribe_audio(
             "progress_percent": 0
         })
 
-    # Prepare transcribe arguments - vad_filter desativado para garantir que músicas,
-    # introduções com instrumentos e falas suaves não sejam descartadas pelo VAD
+    # Prepare transcribe arguments - word_timestamps ativado para sincronização milimétrica
+    # vad_filter desativado para garantir que introduções musicais não cortem o áudio
     kwargs = {
         "beam_size": 5,
+        "word_timestamps": True,
         "vad_filter": False,
         "condition_on_previous_text": False,
     }
@@ -66,19 +67,23 @@ def transcribe_audio(
     segments_list = []
     for idx, s in enumerate(segments_generator, start=1):
         text = s.text.strip()
+        # Refina o início e fim com base na primeira e última palavra pronunciada
+        start_time = s.words[0].start if (s.words and len(s.words) > 0) else s.start
+        end_time = s.words[-1].end if (s.words and len(s.words) > 0) else s.end
+
         seg_data = {
             "id": idx,
-            "start": round(s.start, 3),
-            "end": round(s.end, 3),
+            "start": round(start_time, 2),
+            "end": round(end_time, 2),
             "text": text
         }
         segments_list.append(seg_data)
         
         if progress_callback and duration > 0:
-            current_pct = min(100, int((s.end / duration) * 100))
+            current_pct = min(100, int((end_time / duration) * 100))
             progress_callback({
                 "status": "transcribing",
-                "message": f"Transcrevendo: {current_pct}% [{format_time(s.start)} -> {format_time(s.end)}]",
+                "message": f"Transcrevendo: {current_pct}% [{format_time(start_time)} -> {format_time(end_time)}]",
                 "progress_percent": current_pct,
                 "current_segment": seg_data
             })
