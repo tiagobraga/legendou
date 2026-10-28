@@ -199,6 +199,13 @@ async def process_job(
         })
 
 # Routes
+@app.api_route("/favicon.ico", methods=["GET", "HEAD"], include_in_schema=False)
+async def favicon():
+    fav_path = BASE_DIR / "static" / "favicon.png"
+    if fav_path.exists():
+        return FileResponse(fav_path)
+    raise HTTPException(status_code=404)
+
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def index_page(request: Request):
     past_jobs = load_past_jobs()

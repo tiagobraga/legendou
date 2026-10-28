@@ -1,122 +1,169 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Legendas: {{ job.original_name }} | Legendou</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ job.original_name }} — Legendou</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261027">
+  <link rel="icon" type="image/png" href="/static/favicon.png?v=20261027">
 </head>
 <body data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
-    <header class="header">
-        <div class="container header-content">
-            <div class="logo">
-                <a href="/" class="back-link">← Nova Transcrição</a>
-                <div>
-                    <h1>{{ job.original_name }}</h1>
-                    <p class="subtitle">Tarefa #{{ job.id }} • Criada em {{ job.created_at }}</p>
-                </div>
-            </div>
-            <div id="job-header-status">
-                {% if job.status == 'completed' %}
-                <span class="status-badge status-done">Concluído</span>
-                {% elif job.status == 'failed' %}
-                <span class="status-badge status-err">Erro</span>
-                {% else %}
-                <span class="status-badge status-proc">Processando</span>
-                {% endif %}
-            </div>
+  <!-- Top Accent Bar (Biblió / Arquivô style) -->
+  <div class="top-accent-bar"></div>
+
+  <!-- Top Sticky Navigation Bar -->
+  <header class="site-topbar">
+    <div class="site-topbar-inner">
+      <div class="topbar-brand">
+        <a href="/" class="back-link" title="Voltar ao início">
+          <span>←</span>
+          <span>Nova Transcrição</span>
+        </a>
+        <div class="topbar-meta">
+          <h1>{{ job.original_name }}</h1>
+          <p>Tarefa #{{ job.id }} • Criada em {{ job.created_at }}</p>
         </div>
-    </header>
+      </div>
+      <div id="job-header-status">
+        {% if job.status == 'completed' %}
+        <span class="status-badge status-done">Concluído</span>
+        {% elif job.status == 'failed' %}
+        <span class="status-badge status-err">Erro</span>
+        {% else %}
+        <span class="status-badge status-proc">Processando</span>
+        {% endif %}
+      </div>
+    </div>
+  </header>
 
-    <main class="container main-content">
-        <!-- Progress Card (Visible while processing) -->
-        <section id="progress-card" class="card {% if job.status == 'completed' %}hidden{% endif %}">
-            <h2>Processando Áudio e Legendas</h2>
-            <p id="progress-message" class="progress-msg">{{ job.message or 'Iniciando pipeline de processamento...' }}</p>
-            
-            <div class="progress-bar-container">
-                <div id="progress-bar" class="progress-bar" style="width: {{ job.progress or 5 }}%;"></div>
+  <div class="detail-container">
+    <main>
+      <!-- Progress Section (Visible while processing) -->
+      <section id="progress-card" class="archive-card {% if job.status == 'completed' %}hidden{% endif %}">
+        <div class="card-header-clean">
+          <h2>Processando Mídia e Gerando Legendas</h2>
+          <p class="card-desc">Sincronização em tempo real via Server-Sent Events (SSE).</p>
+        </div>
+
+        <div class="progress-container-box">
+          <div class="progress-header">
+            <div id="progress-message" class="progress-msg">
+              <span>⏳</span>
+              <span>{{ job.message or 'Iniciando pipeline de processamento...' }}</span>
             </div>
-            <div class="progress-details">
-                <span id="progress-pct">{{ job.progress or 5 }}%</span>
-                <span class="gpu-indicator">⚡ Aceleração GPU NVIDIA RTX 3060</span>
-            </div>
-        </section>
+            <div id="progress-pct" class="progress-pct">{{ job.progress or 5 }}%</div>
+          </div>
+          <div class="progress-bar-bg">
+            <div id="progress-bar" class="progress-bar-fill" style="width: {{ job.progress or 5 }}%;"></div>
+          </div>
+          <div class="progress-footer">
+            <span>Pipeline: Download → FFmpeg → Faster-Whisper → Ollama</span>
+            <span class="gpu-tag">⚡ Aceleração GPU NVIDIA RTX 3060</span>
+          </div>
+        </div>
+      </section>
 
-        <!-- Results Card (Visible when completed) -->
-        <section id="results-card" class="card {% if job.status != 'completed' %}hidden{% endif %}">
-            <div class="results-header">
-                <div>
-                    <h2>Legendas Geradas com Sucesso</h2>
-                    <p class="card-desc">Idioma detectado: <strong>{{ languages.get(job.detected_language, job.detected_language) }}</strong></p>
-                </div>
-                <div class="download-actions">
-                    <a id="btn-download-zip" href="/api/jobs/{{ job.id }}/download/{{ job.zip_file }}" class="btn btn-primary" download>
-                        📦 Baixar Pacote Completo (.ZIP)
-                    </a>
-                </div>
-            </div>
+      <!-- Results Card (Visible when completed) -->
+      <section id="results-card" class="archive-card {% if job.status != 'completed' %}hidden{% endif %}">
+        <div class="results-header-bar">
+          <div>
+            <h2>Legendas Sincronizadas</h2>
+            <p class="card-desc">
+              Idioma original detectado: <strong>{{ languages.get(job.detected_language, job.detected_language) }}</strong>
+            </p>
+          </div>
+          <div>
+            <a id="btn-download-zip" href="/api/jobs/{{ job.id }}/download/{{ job.zip_file }}" class="btn btn-primary" download>
+              <span>📦 Baixar Pacote Completo (.ZIP)</span>
+            </a>
+          </div>
+        </div>
 
-            <!-- Media Player Section -->
-            <div class="player-wrapper">
-                <video id="media-player" controls preload="metadata" class="media-player">
-                    <source src="/api/jobs/{{ job.id }}/media">
-                    Seu navegador não suporta reprodução de vídeo/áudio HTML5.
-                </video>
-            </div>
+        <!-- Integrated HTML5 Player -->
+        <div class="player-container">
+          <video id="media-player" controls preload="metadata" class="media-player">
+            <source src="/api/jobs/{{ job.id }}/media">
+            Seu navegador não suporta reprodução HTML5 de áudio/vídeo.
+          </video>
+        </div>
 
-            <!-- Language Tabs -->
-            <div class="lang-tabs-container">
-                <label class="section-label">Selecione o Idioma da Legenda:</label>
-                <div id="lang-buttons" class="tab-buttons">
-                    {% if job.results %}
-                        {% for lang_code, res in job.results.items() %}
-                        <button type="button" class="tab-btn lang-tab-btn {% if loop.first %}active{% endif %}" data-lang="{{ lang_code }}">
-                            🌐 {{ res.name }}
-                        </button>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            </div>
+        <!-- Language Selector Tabs -->
+        <div class="form-group">
+          <label style="font-size: 0.95rem; font-weight: 700; color: var(--color-brand-title);">
+            Selecione o Idioma da Legenda:
+          </label>
+          <div id="lang-buttons" class="tab-buttons">
+            {% if job.results %}
+              {% for lang_code, res in job.results.items() %}
+              <button type="button" class="tab-btn lang-tab-btn {% if loop.first %}active{% endif %}" data-lang="{{ lang_code }}">
+                <span>🌐</span>
+                <span>{{ res.name }}</span>
+              </button>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
 
-            <!-- Subtitle Formats & Downloads for selected language -->
-            <div class="format-toolbar">
-                <div class="view-tabs">
-                    <button type="button" class="view-tab-btn active" data-view="timed-view">⏱️ Transcrição com Horários</button>
-                    <button type="button" class="view-tab-btn" data-view="srt-view">🎬 Formato Legenda (SRT)</button>
-                    <button type="button" class="view-tab-btn" data-view="plain-view">📄 Texto Corrido (Prosa)</button>
-                </div>
-                <div class="file-downloads">
-                    <button type="button" id="btn-copy-text" class="btn btn-sm btn-outline">📋 Copiar Texto</button>
-                    <a id="btn-dl-srt" href="#" class="btn btn-sm btn-outline" download>Baixar .SRT</a>
-                    <a id="btn-dl-vtt" href="#" class="btn btn-sm btn-outline" download>Baixar .VTT</a>
-                    <a id="btn-dl-txt" href="#" class="btn btn-sm btn-outline" download>Baixar .TXT</a>
-                </div>
-            </div>
+        <!-- Subtitle Formats Toolbar & Download Actions -->
+        <div class="format-bar">
+          <div class="view-tabs-group">
+            <button type="button" class="tab-btn view-tab-btn active" data-view="timed-view">
+              <span>⏱️ Minutagem / Ata</span>
+            </button>
+            <button type="button" class="tab-btn view-tab-btn" data-view="srt-view">
+              <span>🎬 Formato SRT</span>
+            </button>
+            <button type="button" class="tab-btn view-tab-btn" data-view="plain-view">
+              <span>📄 Texto Corrido</span>
+            </button>
+          </div>
+          <div class="file-downloads-group">
+            <button type="button" id="btn-copy-text" class="btn btn-outline btn-sm">
+              <span>📋 Copiar Texto</span>
+            </button>
+            <a id="btn-dl-srt" href="#" class="btn btn-outline btn-sm" download>
+              <span>Baixar .SRT</span>
+            </a>
+            <a id="btn-dl-vtt" href="#" class="btn btn-outline btn-sm" download>
+              <span>Baixar .VTT</span>
+            </a>
+            <a id="btn-dl-txt" href="#" class="btn btn-outline btn-sm" download>
+              <span>Baixar .TXT</span>
+            </a>
+          </div>
+        </div>
 
-            <!-- Content Display Area -->
-            <div class="content-display-box">
-                <!-- 1. Timed Transcript View -->
-                <div id="timed-view" class="view-content active">
-                    <pre id="timed-text-content" class="text-content"></pre>
-                </div>
+        <!-- Subtitle Text Display Box -->
+        <div class="content-box">
+          <!-- 1. Timed View -->
+          <div id="timed-view" class="view-content active">
+            <pre id="timed-text-content" class="text-transcript"></pre>
+          </div>
 
-                <!-- 2. SRT View -->
-                <div id="srt-view" class="view-content">
-                    <pre id="srt-text-content" class="text-content"></pre>
-                </div>
+          <!-- 2. SRT View -->
+          <div id="srt-view" class="view-content">
+            <pre id="srt-text-content" class="text-transcript"></pre>
+          </div>
 
-                <!-- 3. Plain Text View -->
-                <div id="plain-view" class="view-content">
-                    <div id="plain-text-content" class="plain-text-content"></div>
-                </div>
-            </div>
-        </section>
+          <!-- 3. Plain View -->
+          <div id="plain-view" class="view-content">
+            <div id="plain-text-content" class="plain-text-flow"></div>
+          </div>
+        </div>
+      </section>
     </main>
+  </div>
 
-    <script id="job-data-json" type="application/json">
-        {{ job | tojson | safe }}
-    </script>
-    <script src="/static/js/job.js"></script>
+  <footer class="site-footer">
+    <p><strong>Legendou</strong> • Plataforma desenvolvida para o servidor <strong>curio.ia.br</strong> • Inteligência Artificial Aberta</p>
+  </footer>
+
+  <script id="job-data-json" type="application/json">
+    {{ job | tojson | safe }}
+  </script>
+  <script src="/static/js/job.js?v=20261027"></script>
 </body>
 </html>

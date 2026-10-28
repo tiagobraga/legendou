@@ -197,12 +197,14 @@ document.addEventListener('DOMContentLoaded', () => {
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalText = btnCopy.textContent;
                 btnCopy.textContent = '✅ Copiado!';
-                btnCopy.style.borderColor = 'var(--accent-success)';
-                btnCopy.style.color = 'var(--accent-success)';
+                btnCopy.style.borderColor = 'var(--color-primary)';
+                btnCopy.style.color = 'var(--color-primary)';
+                btnCopy.style.background = 'var(--color-primary-light)';
                 setTimeout(() => {
                     btnCopy.textContent = originalText;
                     btnCopy.style.borderColor = '';
                     btnCopy.style.color = '';
+                    btnCopy.style.background = '';
                 }, 2000);
             });
         });

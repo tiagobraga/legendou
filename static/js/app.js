@@ -32,14 +32,16 @@ document.addEventListener('DOMContentLoaded', () => {
         ['dragenter', 'dragover'].forEach(eventName => {
             dropzone.addEventListener(eventName, (e) => {
                 e.preventDefault();
-                dropzone.style.borderColor = 'var(--accent-primary)';
+                dropzone.style.borderColor = 'var(--color-primary)';
+                dropzone.style.background = 'rgba(30, 77, 43, 0.05)';
             });
         });
 
         ['dragleave', 'drop'].forEach(eventName => {
             dropzone.addEventListener(eventName, (e) => {
                 e.preventDefault();
-                dropzone.style.borderColor = 'var(--input-border)';
+                dropzone.style.borderColor = 'var(--color-brand-border)';
+                dropzone.style.background = '#FAF9F6';
             });
         });
 

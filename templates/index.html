@@ -1,152 +1,186 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Legendou | Transcrição e Legendagem com IA</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Legendou | Transcrição e Legendagem com IA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261027">
+  <link rel="icon" type="image/png" href="/static/favicon.png?v=20261027">
 </head>
 <body>
-    <header class="header">
-        <div class="container header-content">
-            <div class="logo">
-                <span class="logo-icon">🎙️</span>
-                <div>
-                    <h1>Legendou</h1>
-                    <p class="subtitle">Transcrição e Legendagem Acelerada por IA • curio.ia.br</p>
-                </div>
-            </div>
-            <div class="badge">GPU NVIDIA RTX 3060 Ativa</div>
-        </div>
+  <!-- Top Accent Bar (Biblió / Arquivô style) -->
+  <div class="top-accent-bar"></div>
+
+  <div class="home-container">
+    <header class="home-header">
+      <div class="brand-badge">
+        <span>🎙️ Inteligência Artificial Aberta • curio.ia.br</span>
+      </div>
+      <h1 class="home-title">
+        <span>Legendou</span>
+      </h1>
+      <p class="home-subtitle">Transcrição, tradução e sincronização de legendas com IA</p>
+      <p class="home-description">
+        Gere arquivos de legenda (.srt, .vtt), transcrições com minutagem e textos corridos em múltiplos idiomas a partir de vídeos do Nextcloud, YouTube ou arquivos locais, com aceleração por GPU.
+      </p>
     </header>
 
-    <main class="container main-content">
-        <section class="card form-card">
-            <h2>Nova Geração de Legenda</h2>
-            <p class="card-desc">Indique o link de um vídeo/áudio (Nextcloud, YouTube ou link direto) ou envie um arquivo do seu computador.</p>
+    <main>
+      <section class="archive-card">
+        <div class="card-header-clean">
+          <h2>Nova Geração de Legenda</h2>
+          <p class="card-desc">Indique o link da mídia remota ou selecione um arquivo de vídeo ou áudio do seu computador.</p>
+        </div>
 
-            <form id="transcribe-form">
-                <!-- Tabs for input method -->
-                <div class="tab-buttons">
-                    <button type="button" class="tab-btn active" data-tab="url-tab">🔗 Link Remoto</button>
-                    <button type="button" class="tab-btn" data-tab="file-tab">📁 Upload de Arquivo</button>
-                </div>
+        <form id="transcribe-form">
+          <!-- Input Mode Tabs -->
+          <div class="tab-buttons">
+            <button type="button" class="tab-btn active" data-tab="url-tab">
+              <span>🔗 Link Remoto</span>
+            </button>
+            <button type="button" class="tab-btn" data-tab="file-tab">
+              <span>📁 Upload de Arquivo</span>
+            </button>
+          </div>
 
-                <!-- Tab URL -->
-                <div id="url-tab" class="tab-content active">
-                    <div class="form-group">
-                        <label for="media_url">Link do Vídeo ou Áudio:</label>
-                        <input type="url" id="media_url" name="media_url" placeholder="Ex.: https://nuvem.curio.ia.br/s/... ou https://youtube.com/watch?v=...">
-                        <span class="help-text">Suporta links públicos do Nextcloud (nuvem.curio.ia.br), YouTube, Vimeo e arquivos diretos (.mp4, .mov, .mp3, etc.).</span>
-                    </div>
-                </div>
-
-                <!-- Tab File Upload -->
-                <div id="file-tab" class="tab-content">
-                    <div class="form-group">
-                        <label>Selecione um Arquivo de Mídia:</label>
-                        <div class="file-dropzone" id="dropzone">
-                            <input type="file" id="media_file" name="file" accept="video/*,audio/*" class="file-input">
-                            <div class="dropzone-label">
-                                <span class="dropzone-icon">📤</span>
-                                <p id="file-name-display"><strong>Clique para escolher</strong> ou arraste o arquivo aqui</p>
-                                <span class="help-text">Formatos aceitos: MP4, MOV, MKV, WebM, MP3, WAV, M4A, OGG, FLAC</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="grid-2">
-                    <!-- Source Language -->
-                    <div class="form-group">
-                        <label for="source_language">Idioma do Áudio Original:</label>
-                        <select id="source_language" name="source_language">
-                            <option value="auto" selected>✨ Detectar Automaticamente</option>
-                            {% for code, name in languages.items() %}
-                            <option value="{{ code }}">{{ name }} ({{ code }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <!-- Model Selection -->
-                    <div class="form-group">
-                        <label for="model_size">Modelo de Transcrição Whisper:</label>
-                        <select id="model_size" name="model_size">
-                            {% for m in models %}
-                            <option value="{{ m.id }}" {% if m.id == default_model %}selected{% endif %}>{{ m.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Target Languages Checkboxes -->
-                <div class="form-group">
-                    <label>Idiomas de Saída das Legendas (Traduções Automáticas):</label>
-                    <div class="checkbox-grid">
-                        {% for code, name in languages.items() %}
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="target_languages" value="{{ code }}" {% if code in ['pt', 'en'] %}checked{% endif %}>
-                            <span>{{ name }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                    <span class="help-text">O sistema sempre gera a versão original e traduzirá automaticamente para os idiomas adicionais selecionados.</span>
-                </div>
-
-                <div class="form-actions">
-                    <button type="submit" id="submit-btn" class="btn btn-primary">
-                        <span>🚀 Gerar Legendas</span>
-                    </button>
-                </div>
-            </form>
-        </section>
-
-        <!-- Past Jobs Section -->
-        {% if past_jobs %}
-        <section class="card history-card">
-            <h3>Histórico de Transcrições Recentes</h3>
-            <div class="table-responsive">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Arquivo / Origem</th>
-                            <th>Idioma</th>
-                            <th>Status</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for j in past_jobs %}
-                        <tr>
-                            <td>{{ j.created_at }}</td>
-                            <td class="font-bold">{{ j.original_name }}</td>
-                            <td><span class="lang-tag">{{ j.effective_source_language or j.detected_language or j.source_language }}</span></td>
-                            <td>
-                                {% if j.status == 'completed' %}
-                                <span class="status-badge status-done">Concluído</span>
-                                {% elif j.status == 'failed' %}
-                                <span class="status-badge status-err">Erro</span>
-                                {% else %}
-                                <span class="status-badge status-proc">Processando</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="/jobs/{{ j.id }}" class="btn btn-sm btn-outline">Abrir Legendas →</a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+          <!-- URL Tab -->
+          <div id="url-tab" class="tab-content active">
+            <div class="form-group">
+              <label for="media_url">Endereço do Vídeo ou Áudio:</label>
+              <input 
+                type="url" 
+                id="media_url" 
+                name="media_url" 
+                class="url-input"
+                placeholder="Ex.: https://nuvem.curio.ia.br/s/... ou https://youtube.com/watch?v=..."
+                autocomplete="off"
+              >
+              <span class="help-text">Suporta links públicos do Nextcloud (nuvem.curio.ia.br), YouTube, links diretos e formatos MP4, MOV, MKV, MP3, etc.</span>
             </div>
-        </section>
-        {% endif %}
+          </div>
+
+          <!-- File Upload Tab -->
+          <div id="file-tab" class="tab-content">
+            <div class="form-group">
+              <label>Arquivo de Mídia do Computador:</label>
+              <div class="file-dropzone" id="dropzone">
+                <input type="file" id="media_file" name="file" accept="video/*,audio/*" class="file-input">
+                <div class="dropzone-label">
+                  <span class="dropzone-icon">📤</span>
+                  <p id="file-name-display"><strong style="color: var(--color-primary);">Clique para escolher</strong> ou arraste o arquivo aqui</p>
+                  <span class="help-text">Formatos aceitos: MP4, MOV, MKV, WebM, MP3, WAV, M4A, OGG, FLAC</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <!-- Source Language -->
+            <div class="form-group">
+              <label for="source_language">Idioma do Áudio Original:</label>
+              <select id="source_language" name="source_language">
+                <option value="auto" selected>✨ Detectar Automaticamente</option>
+                {% for code, name in languages.items() %}
+                <option value="{{ code }}">{{ name }} ({{ code }})</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Model Selection -->
+            <div class="form-group">
+              <label for="model_size">Modelo de Transcrição Whisper:</label>
+              <select id="model_size" name="model_size">
+                {% for m in models %}
+                <option value="{{ m.id }}" {% if m.id == default_model %}selected{% endif %}>{{ m.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Target Languages Checkboxes -->
+          <div class="form-group">
+            <label>Idiomas de Saída (Tradução Local via Ollama):</label>
+            <div class="checkbox-grid">
+              {% for code, name in languages.items() %}
+              <label class="checkbox-label">
+                <input type="checkbox" name="target_languages" value="{{ code }}" {% if code in ['pt', 'en'] %}checked{% endif %}>
+                <span>{{ name }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <span class="help-text">O sistema sempre preserva o áudio original transcrito e gera versões traduzidas automaticamente com sincronização temporal idêntica.</span>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" id="submit-btn" class="btn btn-primary">
+              <span>⚡ Iniciar Transcrição e Legendagem</span>
+              <span>↵</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Past Transcriptions History -->
+      {% if past_jobs %}
+      <section class="archive-card">
+        <div class="card-header-clean">
+          <h2>Histórico de Transcrições Recentes</h2>
+          <p class="card-desc">Tarefas processadas anteriormente e disponíveis para download imediato.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table class="clean-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Arquivo / Identificador</th>
+                <th>Idioma</th>
+                <th>Status</th>
+                <th style="text-align: right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for j in past_jobs %}
+              <tr>
+                <td style="color: var(--color-brand-muted); font-size: 0.85rem;">{{ j.created_at }}</td>
+                <td class="font-medium">{{ j.original_name }}</td>
+                <td>
+                  <span class="lang-pill">
+                    {{ j.effective_source_language or j.detected_language or j.source_language }}
+                  </span>
+                </td>
+                <td>
+                  {% if j.status == 'completed' %}
+                  <span class="status-badge status-done">Concluído</span>
+                  {% elif j.status == 'failed' %}
+                  <span class="status-badge status-err">Erro</span>
+                  {% else %}
+                  <span class="status-badge status-proc">Processando</span>
+                  {% endif %}
+                </td>
+                <td style="text-align: right;">
+                  <a href="/jobs/{{ j.id }}" class="btn btn-sm btn-outline">
+                    <span>Abrir Legendas</span>
+                    <span>→</span>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {% endif %}
     </main>
+  </div>
 
-    <footer class="footer">
-        <p>Legendou • Sistema desenvolvido para o servidor <strong>curio.ia.br</strong> • Inteligência Artificial Aberta</p>
-    </footer>
+  <footer class="site-footer">
+    <p><strong>Legendou</strong> • Plataforma desenvolvida para o servidor <strong>curio.ia.br</strong> • Inteligência Artificial Aberta</p>
+  </footer>
 
-    <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v=20261027"></script>
 </body>
 </html>
