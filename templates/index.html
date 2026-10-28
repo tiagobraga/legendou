@@ -16,15 +16,12 @@
 
   <div class="home-container">
     <header class="home-header">
-      <div class="brand-badge">
-        <span>🎙️ Inteligência Artificial Aberta • curio.ia.br</span>
-      </div>
       <h1 class="home-title">
         <span>Legendou</span>
       </h1>
-      <p class="home-subtitle">Transcrição, tradução e sincronização de legendas com IA</p>
+      <p class="home-subtitle">Transcrição, tradução e sincronização de legendas</p>
       <p class="home-description">
-        Gere arquivos de legenda (.srt, .vtt), transcrições com minutagem e textos corridos em múltiplos idiomas a partir de vídeos do Nextcloud, YouTube ou arquivos locais, com aceleração por GPU.
+        Gere arquivos de legenda, transcrições com minutagem para atas e textos corridos em múltiplos idiomas a partir de arquivos de mídia.
       </p>
     </header>
 
@@ -91,7 +88,7 @@
 
             <!-- Model Selection -->
             <div class="form-group">
-              <label for="model_size">Modelo de Transcrição Whisper:</label>
+              <label for="model_size">Modelo de Transcrição :</label>
               <select id="model_size" name="model_size">
                 {% for m in models %}
                 <option value="{{ m.id }}" {% if m.id == default_model %}selected{% endif %}>{{ m.name }}</option>
@@ -102,7 +99,7 @@
 
           <!-- Target Languages Checkboxes -->
           <div class="form-group">
-            <label>Idiomas de Saída (Tradução Local via Ollama):</label>
+            <label>Idiomas de Saída (traduzido com IA):</label>
             <div class="checkbox-grid">
               {% for code, name in languages.items() %}
               <label class="checkbox-label">
@@ -152,7 +149,7 @@
       <section class="archive-card">
         <div class="card-header-clean">
           <h2>Histórico de Transcrições Recentes</h2>
-          <p class="card-desc">Tarefas processadas anteriormente e disponíveis para download imediato.</p>
+          <p class="card-desc">Tarefas processadas anteriormente.</p>
         </div>
 
         <div class="table-wrap">
@@ -202,7 +199,7 @@
   </div>
 
   <footer class="site-footer">
-    <p><strong>Legendou</strong> • Plataforma desenvolvida para o servidor <strong>curio.ia.br</strong> • Inteligência Artificial Aberta</p>
+    <p>Legendou - Uma iniciativa open source do grupo de pesquisa <a href="http://www.curio.ia.br" target="_blank" rel="noopener noreferrer" style="color: var(--color-primary); font-weight: 600; text-decoration: underline;">Curió</a> · CC-BY</p>
   </footer>
 
   <script src="/static/js/app.js?v=20261027"></script>
