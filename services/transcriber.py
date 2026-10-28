@@ -50,11 +50,12 @@ def transcribe_audio(
             "progress_percent": 0
         })
 
-    # Prepare transcribe arguments
+    # Prepare transcribe arguments - vad_filter desativado para garantir que músicas,
+    # introduções com instrumentos e falas suaves não sejam descartadas pelo VAD
     kwargs = {
         "beam_size": 5,
-        "vad_filter": True,
-        "vad_parameters": dict(min_silence_duration_ms=500),
+        "vad_filter": False,
+        "condition_on_previous_text": False,
     }
     if language and language.lower() not in ["auto", ""]:
         kwargs["language"] = language.lower()

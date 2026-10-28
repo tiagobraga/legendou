@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261028">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261028_v3">
   <link rel="icon" type="image/png" href="/static/favicon.png?v=20261028">
 </head>
 <body data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
@@ -150,7 +150,7 @@
 
           <!-- Retention Active Notice (when original video is still on server) -->
           <div id="media-retention-notice" class="media-notice retention-info {% if not media_exists %}hidden{% endif %}">
-            <span>⏱️ <strong>Vídeo disponível temporariamente:</strong> A mídia original permanece disponível para visualização e conferência por 60 minutos após o término da conversão, sendo removida em seguida para liberar espaço em disco.</span>
+            <span>⏱️ Vídeo disponível temporariamente, a mídia original é mantida disponível para conferência por 60 minutos, depois é removida definitivamente de forma automática.</span>
           </div>
 
           <!-- Retention Ended / Deletion Notice (exact text requested by user) -->

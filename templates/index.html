@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css?v=20261027">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261028_v3">
   <link rel="icon" type="image/png" href="/static/favicon.png?v=20261027">
 </head>
 <body>
@@ -154,26 +154,33 @@
 
         <div class="table-wrap">
           <table class="clean-table">
+            <colgroup>
+              <col class="col-width-date">
+              <col class="col-width-file">
+              <col class="col-width-lang">
+              <col class="col-width-status">
+              <col class="col-width-actions">
+            </colgroup>
             <thead>
               <tr>
                 <th>Data</th>
-                <th>Arquivo / Identificador</th>
-                <th>Idioma</th>
-                <th>Status</th>
+                <th>Arquivo</th>
+                <th style="text-align: center;">Idioma</th>
+                <th style="text-align: center;">Status</th>
                 <th style="text-align: right;">Ações</th>
               </tr>
             </thead>
             <tbody>
               {% for j in past_jobs %}
               <tr>
-                <td style="color: var(--color-brand-muted); font-size: 0.85rem;">{{ j.created_at }}</td>
-                <td class="font-medium">{{ j.original_name }}</td>
-                <td>
+                <td class="col-date">{{ j.created_at }}</td>
+                <td class="col-file" title="{{ j.original_name }}">{{ j.original_name }}</td>
+                <td style="text-align: center;">
                   <span class="lang-pill">
                     {{ j.effective_source_language or j.detected_language or j.source_language }}
                   </span>
                 </td>
-                <td>
+                <td style="text-align: center;">
                   {% if j.status == 'completed' %}
                   <span class="status-badge status-done">Concluído</span>
                   {% elif j.status == 'failed' %}
@@ -183,7 +190,7 @@
                   {% endif %}
                 </td>
                 <td style="text-align: right;">
-                  <a href="/jobs/{{ j.id }}" class="btn btn-sm btn-outline">
+                  <a href="/jobs/{{ j.id }}" class="btn btn-sm btn-outline btn-table-action">
                     <span>Abrir Legendas</span>
                     <span>→</span>
                   </a>
