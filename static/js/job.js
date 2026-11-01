@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnDlVtt = document.getElementById('btn-dl-vtt');
     const btnDlTxt = document.getElementById('btn-dl-txt');
     const btnDlMp3 = document.getElementById('btn-dl-mp3');
+    const btnDlVideo = document.getElementById('btn-dl-video');
+    const btnDlDiscourse = document.getElementById('btn-dl-discourse');
+    const discourseContent = document.getElementById('discourse-text-content');
     const btnCopy = document.getElementById('btn-copy-text');
     const btnDlZip = document.getElementById('btn-download-zip');
     
@@ -27,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const audioContainer = document.getElementById('audio-player-container');
     const retentionNotice = document.getElementById('media-retention-notice');
     const deletedNotice = document.getElementById('media-deleted-notice');
+    const videoSkippedNotice = document.getElementById('video-skipped-notice');
     const mediaPlayer = document.getElementById('media-player');
     const audioPlayer = document.getElementById('audio-player');
     const metaMediaStatus = document.getElementById('meta-media-status');
@@ -69,6 +73,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Video download button (Hardsub .MP4)
+        if (btnDlVideo) {
+            const hasVideo = (job.video_file && job.video_exists !== false && !job.media_deleted);
+            if (hasVideo) {
+                btnDlVideo.href = `/api/jobs/${jId}/download/${job.video_file}`;
+                btnDlVideo.classList.remove('hidden');
+            } else {
+                btnDlVideo.classList.add('hidden');
+            }
+        }
+
+        // Video skipped notice
+        if (videoSkippedNotice) {
+            if (job.video_skipped_reason) {
+                videoSkippedNotice.textContent = `ℹ️ ${job.video_skipped_reason}`;
+                videoSkippedNotice.classList.remove('hidden');
+            } else {
+                videoSkippedNotice.classList.add('hidden');
+            }
+        }
+
         // Media and notices visibility
         const hasMedia = (job.media_exists !== false && !job.media_deleted);
         if (hasMedia) {
@@ -108,31 +133,50 @@ document.addEventListener('DOMContentLoaded', () => {
         // Render language tabs
         if (langButtonsContainer) {
             langButtonsContainer.innerHTML = '';
-            const langs = Object.keys(job.results);
-            
-            langs.forEach((langCode, idx) => {
-                const res = job.results[langCode];
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = `tab-btn lang-tab-btn ${idx === 0 ? 'active' : ''}`;
-                btn.dataset.lang = langCode;
-                btn.textContent = `🌐 ${res.name || langCode}`;
-                
-                btn.addEventListener('click', () => {
-                    document.querySelectorAll('.lang-tab-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    selectLanguage(langCode, job);
+            const langs = Object.keys(job.results || {});
+            const langGroup = document.getElementById('lang-selector-group');
+            const viewTabs = document.querySelector('.view-tabs-group');
+
+            if (langs.length === 0) {
+                if (langGroup) langGroup.classList.add('hidden');
+                if (viewTabs) viewTabs.classList.add('hidden');
+                if (btnCopy) btnCopy.classList.add('hidden');
+                if (btnDlSrt) btnDlSrt.classList.add('hidden');
+                if (btnDlVtt) btnDlVtt.classList.add('hidden');
+                if (btnDlTxt) btnDlTxt.classList.add('hidden');
+                if (btnDlDiscourse) btnDlDiscourse.classList.add('hidden');
+                if (timedContent) {
+                    timedContent.textContent = "Processamento concluído: Esta tarefa foi configurada para extração exclusiva de áudio MP3 (sem geração de transcrição textual).\n\nUtilize o botão 'Baixar .MP3' acima para baixar ou o reprodutor para ouvir.";
+                }
+            } else {
+                if (langGroup) langGroup.classList.remove('hidden');
+                if (viewTabs) viewTabs.classList.remove('hidden');
+                if (btnCopy) btnCopy.classList.remove('hidden');
+
+                langs.forEach((langCode, idx) => {
+                    const res = job.results[langCode];
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = `tab-btn lang-tab-btn ${idx === 0 ? 'active' : ''}`;
+                    btn.dataset.lang = langCode;
+                    btn.textContent = `🌐 ${res.name || langCode}`;
+                    
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.lang-tab-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        selectLanguage(langCode, job);
+                    });
+                    
+                    langButtonsContainer.appendChild(btn);
                 });
-                
-                langButtonsContainer.appendChild(btn);
-            });
 
-            // Set up player tracks
-            setupPlayerTracks(job);
+                // Set up player tracks
+                setupPlayerTracks(job);
 
-            // Select first language
-            if (langs.length > 0) {
-                selectLanguage(langs[0], job);
+                // Select first language
+                if (langs.length > 0) {
+                    selectLanguage(langs[0], job);
+                }
             }
         }
     }
@@ -183,11 +227,79 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!res) return;
         const jId = job.id || jobId;
 
-        // Update downloads
+        // Update downloads and view tabs conditionally based on res.files
         if (res.files) {
-            if (res.files.srt && btnDlSrt) btnDlSrt.href = `/api/jobs/${jId}/download/${res.files.srt}`;
-            if (res.files.vtt && btnDlVtt) btnDlVtt.href = `/api/jobs/${jId}/download/${res.files.vtt}`;
-            if (res.files.timed_txt && btnDlTxt) btnDlTxt.href = `/api/jobs/${jId}/download/${res.files.timed_txt}`;
+            if (res.files.srt && btnDlSrt) {
+                btnDlSrt.href = `/api/jobs/${jId}/download/${res.files.srt}`;
+                btnDlSrt.classList.remove('hidden');
+            } else if (btnDlSrt) {
+                btnDlSrt.classList.add('hidden');
+            }
+
+            if (res.files.vtt && btnDlVtt) {
+                btnDlVtt.href = `/api/jobs/${jId}/download/${res.files.vtt}`;
+                btnDlVtt.classList.remove('hidden');
+            } else if (btnDlVtt) {
+                btnDlVtt.classList.add('hidden');
+            }
+
+            if (res.files.timed_txt && btnDlTxt) {
+                btnDlTxt.href = `/api/jobs/${jId}/download/${res.files.timed_txt}`;
+                btnDlTxt.classList.remove('hidden');
+            } else if (btnDlTxt) {
+                btnDlTxt.classList.add('hidden');
+            }
+
+            if (res.files.discourse_txt && btnDlDiscourse) {
+                btnDlDiscourse.href = `/api/jobs/${jId}/download/${res.files.discourse_txt}`;
+                btnDlDiscourse.classList.remove('hidden');
+            } else if (btnDlDiscourse) {
+                btnDlDiscourse.classList.add('hidden');
+            }
+
+            // Adjust tabs visibility
+            const tabTimed = document.querySelector('[data-view="timed-view"]');
+            const tabSrt = document.querySelector('[data-view="srt-view"]');
+            const tabPlain = document.querySelector('[data-view="plain-view"]');
+            const tabDiscourse = document.querySelector('[data-view="discourse-view"]');
+
+            if (tabTimed) {
+                if (res.files.timed_txt) tabTimed.classList.remove('hidden');
+                else tabTimed.classList.add('hidden');
+            }
+            if (tabSrt) {
+                if (res.files.srt) tabSrt.classList.remove('hidden');
+                else tabSrt.classList.add('hidden');
+            }
+            if (tabPlain) {
+                if (res.files.plain_txt) tabPlain.classList.remove('hidden');
+                else tabPlain.classList.add('hidden');
+            }
+            if (tabDiscourse) {
+                if (res.files.discourse_txt) tabDiscourse.classList.remove('hidden');
+                else tabDiscourse.classList.add('hidden');
+            }
+
+            // If active tab was hidden, switch to first visible tab
+            const activeTab = document.querySelector('.view-tab-btn.active');
+            if (activeTab && activeTab.classList.contains('hidden')) {
+                const firstVisible = document.querySelector('.view-tab-btn:not(.hidden)');
+                if (firstVisible) firstVisible.click();
+            }
+        }
+
+        // 4. Discourse View
+        if (discourseContent) {
+            if (res.discourse) {
+                discourseContent.textContent = res.discourse;
+            } else if (res.files && res.files.discourse_txt) {
+                fetch(`/api/jobs/${jId}/download/${res.files.discourse_txt}`)
+                    .then(r => r.text())
+                    .then(txt => { discourseContent.textContent = txt; })
+                    .catch(() => { discourseContent.textContent = 'Carregando discurso...'; });
+            } else {
+                discourseContent.textContent = 'Formato Discurso não foi gerado para este idioma.';
+            }
         }
 
         // Render views from segments

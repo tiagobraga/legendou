@@ -18,11 +18,13 @@ from config import (
     DEFAULT_WHISPER_MODEL, DEFAULT_DEVICE
 )
 from services.downloader import download_media
-from services.audio import extract_and_convert_audio, convert_to_mp3
+from services.audio import extract_and_convert_audio, convert_to_mp3, get_media_duration
 from services.transcriber import transcribe_audio
 from services.diarizer import identify_speakers
 from services.translator import translate_segments
 from services.subtitle_writer import write_subtitle_files, create_zip_bundle
+from services.video import has_video_stream, burn_subtitles_to_video
+from services.discourse import generate_discourse_text
 
 app = FastAPI(title="Legendou", version="1.0.0")
 
@@ -130,17 +132,32 @@ def cleanup_expired_media(max_age_seconds: int = 3600):
 
         if completed_ts and (now - completed_ts) >= max_age_seconds:
             deleted_any = False
-            for p in list(job_dir.iterdir()):
-                if p.is_file() and p.suffix.lower() in [".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv"]:
+
+            # 1. Deletar arquivo de mídia original enviado/baixado (vídeo ou áudio pesado: .ogg, .mp4, .mov, etc.)
+            orig_name = data.get("media_filename")
+            if orig_name:
+                orig_file = job_dir / orig_name
+                # Preserva apenas se o arquivo for o MP3 final gerado
+                if orig_file.exists() and orig_file.is_file() and orig_file.name != data.get("mp3_file"):
                     try:
-                        p.unlink()
+                        orig_file.unlink()
                         deleted_any = True
                     except Exception as e:
-                        print(f"Erro ao deletar vídeo expirado {p}: {e}")
+                        print(f"Erro ao deletar mídia original expirada {orig_file}: {e}")
+
+            # 2. Deletar arquivos de mídia temporários pesados (.mov, .mp4, .mkv, .ogg, etc.) mantendo .mp3 e textos
+            for p in list(job_dir.iterdir()):
+                if p.is_file() and p.suffix.lower() in [".mov", ".mp4", ".mkv", ".webm", ".avi", ".m4v", ".flv", ".ogg", ".wav"]:
+                    if p.name != data.get("mp3_file") and p.suffix.lower() not in [".srt", ".vtt", ".txt", ".json", ".zip"]:
+                        try:
+                            p.unlink()
+                            deleted_any = True
+                        except Exception as e:
+                            print(f"Erro ao deletar arquivo de mídia expirado {p}: {e}")
 
             if deleted_any or not data.get("media_deleted"):
                 data["media_deleted"] = True
-                data["media_deleted_at"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                data["media_deleted_at"] = data.get("media_deleted_at") or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 if meta_path.exists():
                     try:
                         with open(meta_path, "w", encoding="utf-8") as jf:
@@ -182,6 +199,7 @@ async def process_job(
     media_url: Optional[str] = None,
     uploaded_file_path: Optional[Path] = None,
     source_lang: Optional[str] = None,
+    speaker_mode: str = "auto",
     target_langs: List[str] = None,
     output_formats: Optional[List[str]] = None,
     model_size: str = DEFAULT_WHISPER_MODEL
@@ -211,13 +229,90 @@ async def process_job(
         file_size_bytes = media_path.stat().st_size
         file_size_formatted = format_file_size(file_size_bytes)
 
+        # Resolução condicional dos formatos de saída selecionados
+        selected_formats = set(f.lower() for f in output_formats)
+        needs_transcription = bool(selected_formats & {"timed", "srt", "plain", "discourse", "video"})
+        needs_diarization = "timed" in selected_formats
+        needs_discourse = "discourse" in selected_formats
+        needs_mp3 = "mp3" in selected_formats
+        media_has_video = has_video_stream(media_path)
+        needs_video = "video" in selected_formats and media_has_video
+        base_name = media_path.stem
+
         JOBS[job_id]["media_filename"] = media_path.name
         JOBS[job_id]["media_exists"] = True
         JOBS[job_id]["media_deleted"] = False
+        JOBS[job_id]["has_video"] = media_has_video
         JOBS[job_id]["file_size_bytes"] = file_size_bytes
         JOBS[job_id]["file_size_formatted"] = file_size_formatted
         JOBS[job_id]["output_formats"] = output_formats
         save_job_state(job_id)
+
+        mp3_file = None
+        video_file = None
+        video_skipped_reason = None
+        sub_results = {}
+
+        # =====================================================================
+        # CASO 1: CAMINHO RÁPIDO (Apenas Áudio MP3, sem transcrição textual)
+        # =====================================================================
+        if not needs_transcription:
+            dur = get_media_duration(media_path)
+            duration_formatted = format_duration(dur)
+            JOBS[job_id]["duration_seconds"] = dur
+            JOBS[job_id]["duration_formatted"] = duration_formatted
+            JOBS[job_id]["detected_language"] = source_lang if (source_lang and source_lang != "auto") else "auto"
+            JOBS[job_id]["effective_source_language"] = JOBS[job_id]["detected_language"]
+
+            if needs_mp3:
+                await notify_job(job_id, {
+                    "status": "converting_mp3",
+                    "progress": 50,
+                    "message": "Extraindo áudio MP3 (192kbps) diretamente via FFmpeg..."
+                })
+                mp3_name = f"{base_name}.mp3"
+                mp3_path = job_dir / mp3_name
+                extra_meta = {
+                    "title": JOBS[job_id].get("original_name") or base_name,
+                    "comment": f"Tarefa #{job_id} • Legendou (curio.ia.br)"
+                }
+                if JOBS[job_id].get("media_url"):
+                    extra_meta["comment"] = f"Fonte: {JOBS[job_id]['media_url']} • Legendou (curio.ia.br)"
+                await convert_to_mp3(media_path, mp3_path, extra_metadata=extra_meta)
+                mp3_file = mp3_name
+                JOBS[job_id]["mp3_file"] = mp3_file
+
+            zip_path = create_zip_bundle(job_dir, f"legendas_{base_name}.zip")
+            elapsed_seconds = round(time.time() - start_time, 1)
+            processing_time_formatted = format_elapsed(elapsed_seconds)
+            completed_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            completed_ts = time.time()
+
+            await notify_job(job_id, {
+                "id": job_id,
+                "status": "completed",
+                "progress": 100,
+                "message": "Extração de áudio concluída com sucesso!",
+                "results": {},
+                "zip_file": zip_path.name,
+                "mp3_file": mp3_file,
+                "video_file": None,
+                "video_exists": False,
+                "video_skipped_reason": "Processamento concluído: Áudio extraído diretamente sem geração de legendas textuais.",
+                "media_exists": media_path.exists(),
+                "media_deleted": False,
+                "file_size_formatted": file_size_formatted,
+                "duration_formatted": duration_formatted,
+                "processing_time_formatted": processing_time_formatted,
+                "elapsed_seconds": elapsed_seconds,
+                "completed_at": completed_at,
+                "completed_timestamp": completed_ts
+            })
+            return
+
+        # =====================================================================
+        # CASO 2: PIPELINE COM TRANSCRIÇÃO (Whisper GPU + Textos/Legendas)
+        # =====================================================================
 
         # 2. Extract Audio for Whisper
         await notify_job(job_id, {"status": "extracting_audio", "progress": 20, "message": "Extraindo e normalizando áudio via FFmpeg..."})
@@ -251,23 +346,26 @@ async def process_job(
             )
         )
 
-        # OPÇÃO 1: Excluir o áudio WAV intermediário imediatamente após a transcrição
         if wav_path.exists():
             try:
                 wav_path.unlink()
             except Exception as e:
                 print(f"Aviso ao remover wav: {e}")
 
-        # 4. Identificação de locutores para Minutagem/Ata
-        await notify_job(job_id, {
-            "status": "diarizing",
-            "progress": 62,
-            "message": "Identificando locutores da reunião/fala ([Pessoa 1], [Pessoa 2])..."
-        })
-        try:
-            segments = await identify_speakers(segments)
-        except Exception as e:
-            print(f"Aviso na diarização: {e}")
+        # 4. Identificação de locutores (apenas se Minutagem/Ata 'timed' estiver selecionada)
+        if needs_diarization:
+            await notify_job(job_id, {
+                "status": "diarizing",
+                "progress": 62,
+                "message": "Identificando locutores da fala ([Pessoa 1], [Pessoa 2])..."
+            })
+            try:
+                segments = await identify_speakers(segments, speaker_mode=speaker_mode)
+            except Exception as e:
+                print(f"Aviso na diarização: {e}")
+                for s in segments:
+                    s["speaker"] = "Pessoa 1"
+        else:
             for s in segments:
                 s["speaker"] = "Pessoa 1"
 
@@ -280,18 +378,36 @@ async def process_job(
         JOBS[job_id]["detected_language"] = detected_lang
         JOBS[job_id]["effective_source_language"] = effective_source_lang
         
-        # Save original subtitles
-        base_name = media_path.stem
-        sub_results = {}
-        
-        orig_files = write_subtitle_files(job_dir, base_name, effective_source_lang, segments)
+        # 5. Formato Discurso (apenas se 'discourse' estiver selecionado)
+        orig_discourse = None
+        if needs_discourse:
+            await notify_job(job_id, {
+                "status": "generating_discourse",
+                "progress": 68,
+                "message": "Gerando formato Discurso (redação editorial limpa sem vícios de fala)..."
+            })
+            try:
+                orig_discourse = await generate_discourse_text(segments, lang_code=effective_source_lang)
+            except Exception as e:
+                print(f"Aviso na geração de discurso: {e}")
+
+        # Gravar arquivos da língua original de acordo com os formatos selecionados
+        orig_files = write_subtitle_files(
+            job_dir,
+            base_name,
+            effective_source_lang,
+            segments,
+            discourse_text=orig_discourse,
+            selected_formats=output_formats
+        )
         sub_results[effective_source_lang] = {
             "name": SUPPORTED_LANGUAGES.get(effective_source_lang, effective_source_lang),
             "files": {k: v.name for k, v in orig_files.items()},
-            "segments": segments
+            "segments": segments,
+            "discourse": orig_discourse
         }
 
-        # 5. Translations
+        # 6. Traduções (apenas se houver idiomas alvos diferentes e formatos textuais solicitados)
         langs_to_translate = [l for l in target_langs if l.lower() != effective_source_lang.lower()]
         if langs_to_translate:
             total_langs = len(langs_to_translate)
@@ -308,20 +424,34 @@ async def process_job(
                     source_lang=effective_source_lang,
                     target_lang=t_lang
                 )
+
+                t_discourse = None
+                if needs_discourse:
+                    try:
+                        t_discourse = await generate_discourse_text(t_segments, lang_code=t_lang)
+                    except Exception as e:
+                        print(f"Aviso na geração de discurso traduzido: {e}")
                 
-                t_files = write_subtitle_files(job_dir, base_name, t_lang, t_segments)
+                t_files = write_subtitle_files(
+                    job_dir,
+                    base_name,
+                    t_lang,
+                    t_segments,
+                    discourse_text=t_discourse,
+                    selected_formats=output_formats
+                )
                 sub_results[t_lang] = {
                     "name": t_name,
                     "files": {k: v.name for k, v in t_files.items()},
-                    "segments": t_segments
+                    "segments": t_segments,
+                    "discourse": t_discourse
                 }
 
-        # 6. Converter para MP3 se selecionado
-        mp3_file = None
-        if "mp3" in [f.lower() for f in output_formats]:
+        # 7. Converter para MP3 se selecionado
+        if needs_mp3:
             await notify_job(job_id, {
                 "status": "converting_mp3",
-                "progress": 90,
+                "progress": 88,
                 "message": "Gerando arquivo de áudio MP3 (192kbps)..."
             })
             mp3_name = f"{base_name}.mp3"
@@ -336,7 +466,39 @@ async def process_job(
             mp3_file = mp3_name
             JOBS[job_id]["mp3_file"] = mp3_file
 
-        # 7. Create ZIP Bundle (limpo, sem arquivos .json)
+        # 8. Gerar Vídeo Legendado (.MP4) se selecionado
+        if "video" in selected_formats:
+            if media_has_video:
+                await notify_job(job_id, {
+                    "status": "generating_video",
+                    "progress": 94,
+                    "message": "Renderizando vídeo com legendas embutidas (hardsub)..."
+                })
+                video_name = f"{base_name}_legendado.mp4"
+                video_path = job_dir / video_name
+                try:
+                    srt_for_video = orig_files.get("srt")
+                    if not srt_for_video or not srt_for_video.exists():
+                        srt_for_video = job_dir / f"{base_name}_{effective_source_lang}.srt"
+                    await burn_subtitles_to_video(
+                        media_path,
+                        srt_for_video,
+                        video_path
+                    )
+                    video_file = video_name
+                    JOBS[job_id]["video_file"] = video_file
+                    JOBS[job_id]["video_exists"] = True
+                    if effective_source_lang in sub_results:
+                        sub_results[effective_source_lang]["files"]["video"] = video_file
+                except Exception as e:
+                    print(f"Erro ao gerar vídeo legendado: {e}")
+                    video_skipped_reason = f"Erro na renderização do vídeo: {str(e)}"
+                    JOBS[job_id]["video_skipped_reason"] = video_skipped_reason
+            else:
+                video_skipped_reason = "A mídia enviada é apenas áudio; a geração de vídeo foi dispensada."
+                JOBS[job_id]["video_skipped_reason"] = video_skipped_reason
+
+        # 8. Create ZIP Bundle (limpo, sem arquivos .json ou vídeos pesados)
         zip_path = create_zip_bundle(job_dir, f"legendas_{base_name}.zip")
         
         elapsed_seconds = round(time.time() - start_time, 1)
@@ -353,6 +515,9 @@ async def process_job(
             "results": sub_results,
             "zip_file": zip_path.name,
             "mp3_file": mp3_file,
+            "video_file": video_file,
+            "video_exists": bool(video_file and (job_dir / video_file).exists()),
+            "video_skipped_reason": video_skipped_reason,
             "media_exists": media_path.exists(),
             "media_deleted": False,
             "file_size_formatted": file_size_formatted,
@@ -400,8 +565,9 @@ async def create_job(
     background_tasks: BackgroundTasks,
     media_url: Optional[str] = Form(None),
     source_language: str = Form("auto"),
+    speaker_mode: str = Form("auto"),
     target_languages: List[str] = Form([]),
-    output_formats: List[str] = Form(["timed", "srt", "plain"]),
+    output_formats: List[str] = Form(["timed", "srt", "plain", "discourse", "video"]),
     model_size: str = Form(DEFAULT_WHISPER_MODEL),
     file: Optional[UploadFile] = File(None)
 ):
@@ -425,6 +591,7 @@ async def create_job(
         "created_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
         "media_url": media_url,
         "source_language": source_language,
+        "speaker_mode": speaker_mode,
         "target_languages": target_languages,
         "output_formats": output_formats,
         "model_size": model_size,
@@ -443,6 +610,7 @@ async def create_job(
         media_url=media_url,
         uploaded_file_path=uploaded_path,
         source_lang=source_language,
+        speaker_mode=speaker_mode,
         target_langs=target_languages,
         output_formats=output_formats,
         model_size=model_size
@@ -469,12 +637,20 @@ async def job_detail_page(request: Request, job_id: str):
         media_exists = media_path.exists()
     job["media_exists"] = media_exists
 
+    # Verifica existência física do vídeo legendado gerado
+    video_exists = False
+    if job.get("video_file") and not job.get("media_deleted"):
+        video_path = DATA_DIR / job_id / job["video_file"]
+        video_exists = video_path.exists()
+    job["video_exists"] = video_exists
+
     return templates.TemplateResponse(
         request=request,
         name="job.html",
         context={
             "job": job,
             "media_exists": media_exists,
+            "video_exists": video_exists,
             "languages": SUPPORTED_LANGUAGES
         }
     )

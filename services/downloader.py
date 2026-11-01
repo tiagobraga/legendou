@@ -66,18 +66,34 @@ async def download_with_ytdlp(
     progress_callback: Optional[Callable[[int, int, str], None]] = None
 ) -> Path:
     out_template = str(output_dir / "%(title).50s.%(ext)s")
+    
+    # Formato que prioriza vídeo + áudio de alta qualidade (MP4/AAC) preservando o vídeo original
     cmd = [
         "yt-dlp",
         "--no-playlist",
-        "-f", "bestaudio/best",
+        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "--embed-metadata",
         "--write-info-json",
-        "-o", out_template,
-        url
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+        "--referer", "https://www.google.com/",
+        "-o", out_template
     ]
+
+    # Suporte automático a cookies persistentes para superar login-wall do Instagram/redes
+    cookie_candidates = [
+        output_dir.parent / "cookies.txt",  # /data/cookies.txt
+        Path("/data/cookies.txt"),
+        Path(__file__).resolve().parent.parent / "cookies.txt"
+    ]
+    for c_path in cookie_candidates:
+        if c_path.is_file() and c_path.stat().st_size > 0:
+            cmd.extend(["--cookies", str(c_path)])
+            break
+
+    cmd.append(url)
     
     if progress_callback:
-        progress_callback(0, 100, "Iniciando download com yt-dlp...")
+        progress_callback(0, 100, "Iniciando download da mídia remota via yt-dlp...")
         
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -87,13 +103,19 @@ async def download_with_ytdlp(
     
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(f"Falha no download via yt-dlp: {stderr.decode('utf-8', errors='ignore')}")
+        err_msg = stderr.decode('utf-8', errors='ignore')
+        if any(term in err_msg.lower() for term in ["login required", "checkpoint", "rate-limit", "redirected to login"]):
+            raise RuntimeError(
+                "O conteúdo solicitado (ex: Instagram / rede social) requer autenticação de login ou é privado. "
+                "Para conteúdos protegidos, configure o arquivo cookies.txt no servidor ou faça o upload manual do arquivo."
+            )
+        raise RuntimeError(f"Falha no download via yt-dlp: {err_msg}")
     
     # Locate the downloaded file
     files = list(output_dir.glob("*"))
-    files = [f for f in files if f.is_file() and not f.name.endswith(".part")]
+    files = [f for f in files if f.is_file() and not f.name.endswith(".part") and not f.name.endswith(".info.json")]
     if not files:
-        raise FileNotFoundError("Nenhum arquivo encontrado após download com yt-dlp.")
+        raise FileNotFoundError("Nenhum arquivo de mídia encontrado após download com yt-dlp.")
     
     # Return newest file
     files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
@@ -112,5 +134,5 @@ async def download_media(
         temp_dest = dest_dir / "media_file"
         return await download_file_http(url, temp_dest, progress_callback)
     else:
-        # Fallback to yt-dlp for video platforms
+        # Fallback to yt-dlp for video platforms (YouTube, Instagram, TikTok, etc.)
         return await download_with_ytdlp(url, dest_dir, progress_callback)

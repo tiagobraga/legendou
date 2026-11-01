@@ -121,17 +121,17 @@ O serviço está configurado no arquivo `/home/braga/servidor/docker-compose.yml
 cd /home/braga/servidor
 
 # Iniciar o container em segundo plano
-docker compose up -d legendas
+docker compose up -d legendou
 
 # Ver logs em tempo real
-docker compose logs -f legendas
+docker compose logs -f legendou
 
 # Reiniciar o serviço
-docker compose restart legendas
+docker compose restart legendou
 
 # Reconstruir a imagem Docker após alterações
-docker compose build legendas
-docker compose up -d legendas
+docker compose build legendou
+docker compose up -d legendou
 ```
 
 ### 5.2. Executar Localmente em Outro Computador (Desenvolvimento)

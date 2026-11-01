@@ -4,6 +4,28 @@ import subprocess
 from pathlib import Path
 from typing import Callable, Optional, Dict, Any
 
+def get_media_duration(input_path: Path) -> float:
+    """
+    Obtém a duração total da mídia em segundos via ffprobe.
+    """
+    try:
+        cmd = [
+            "ffprobe",
+            "-i", str(input_path),
+            "-show_entries", "format=duration",
+            "-v", "quiet",
+            "-of", "json"
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        if res.returncode == 0 and res.stdout:
+            data = json.loads(res.stdout)
+            dur_str = data.get("format", {}).get("duration")
+            if dur_str:
+                return float(dur_str)
+    except Exception as e:
+        print(f"Aviso ao ler duração ffprobe: {e}")
+    return 0.0
+
 def get_media_metadata(input_path: Path) -> Dict[str, str]:
     """
     Extrai o máximo de metadados possível da fonte:

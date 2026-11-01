@@ -130,7 +130,7 @@
         <!-- Media Player / Audio Player / Retention Notices -->
         <div id="media-player-wrapper">
           <!-- Video Player Container -->
-          <div id="video-player-container" class="player-container {% if not media_exists %}hidden{% endif %}">
+          <div id="video-player-container" class="player-container {% if not media_exists or not job.has_video %}hidden{% endif %}">
             <video id="media-player" controls preload="metadata" class="media-player">
               <source src="/api/jobs/{{ job.id }}/media">
               Seu navegador não suporta reprodução HTML5 de áudio/vídeo.
@@ -138,7 +138,7 @@
           </div>
 
           <!-- Audio Player Container -->
-          <div id="audio-player-container" class="audio-player-box {% if media_exists or not job.mp3_file %}hidden{% endif %}">
+          <div id="audio-player-container" class="audio-player-box {% if (media_exists and job.has_video) or not job.mp3_file %}hidden{% endif %}">
             <div class="audio-player-header">
               <span>🎵 <strong>Áudio MP3 Gerado:</strong> Ouça a gravação completa abaixo:</span>
             </div>
@@ -157,10 +157,15 @@
           <div id="media-deleted-notice" class="media-notice deleted-info {% if media_exists %}hidden{% endif %}">
             <span>ℹ️ Os arquivos são mantidos no servidor por 60 minutos para verificação da legenda e então removidos de forma definitiva automaticamente. Todas as legendas e transcrições completas continuam preservadas e disponíveis para consulta e download abaixo.</span>
           </div>
+
+          <!-- Video Skipped Notice (when media was audio-only) -->
+          <div id="video-skipped-notice" class="media-notice deleted-info {% if not job.video_skipped_reason %}hidden{% endif %}">
+            <span>ℹ️ {{ job.video_skipped_reason }}</span>
+          </div>
         </div>
 
         <!-- Language Selector Tabs -->
-        <div class="form-group" style="margin-top: 1.5rem;">
+        <div id="lang-selector-group" class="form-group {% if not job.results or job.results|length == 0 %}hidden{% endif %}" style="margin-top: 1.5rem;">
           <label style="font-size: 0.95rem; font-weight: 700; color: var(--color-brand-title);">
             Selecione o Idioma da Legenda:
           </label>
@@ -188,6 +193,9 @@
             <button type="button" class="tab-btn view-tab-btn" data-view="plain-view">
               <span>📄 Texto Corrido</span>
             </button>
+            <button type="button" class="tab-btn view-tab-btn" data-view="discourse-view">
+              <span>Discurso</span>
+            </button>
           </div>
           <div class="file-downloads-group">
             <button type="button" id="btn-copy-text" class="btn btn-outline btn-sm">
@@ -202,8 +210,14 @@
             <a id="btn-dl-txt" href="#" class="btn btn-outline btn-sm" download>
               <span>Baixar .TXT</span>
             </a>
-            <a id="btn-dl-mp3" href="{% if job.mp3_file %}/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}{% else %}#{% endif %}" class="btn btn-outline btn-sm {% if not job.mp3_file %}hidden{% endif %}" style="font-weight: 700; color: var(--color-primary); border-color: var(--color-primary);" download>
-              <span>🎵 Baixar .MP3</span>
+            <a id="btn-dl-discourse" href="#" class="btn btn-outline btn-sm hidden" download>
+              <span>Baixar Discurso (.TXT)</span>
+            </a>
+            <a id="btn-dl-mp3" href="{% if job.mp3_file %}/api/jobs/{{ job.id }}/download/{{ job.mp3_file }}{% else %}#{% endif %}" class="btn btn-outline btn-sm {% if not job.mp3_file %}hidden{% endif %}" download>
+              <span>Baixar .MP3</span>
+            </a>
+            <a id="btn-dl-video" href="{% if job.video_file and video_exists %}/api/jobs/{{ job.id }}/download/{{ job.video_file }}{% else %}#{% endif %}" class="btn btn-outline btn-sm {% if not job.video_file or not video_exists %}hidden{% endif %}" download>
+              <span>Baixar Vídeo (.MP4)</span>
             </a>
           </div>
         </div>
@@ -224,6 +238,11 @@
           <div id="plain-view" class="view-content">
             <div id="plain-text-content" class="plain-text-flow"></div>
           </div>
+
+          <!-- 4. Discourse View -->
+          <div id="discourse-view" class="view-content">
+            <div id="discourse-text-content" class="plain-text-flow" style="font-family: 'Merriweather', serif; font-size: 1.05rem; line-height: 1.85; color: var(--color-brand-title); background: #ffffff; padding: 2rem; border-radius: 8px; border: 1px solid var(--color-border); white-space: pre-wrap;"></div>
+          </div>
         </div>
       </section>
     </main>
@@ -236,6 +255,6 @@
   <script id="job-data-json" type="application/json">
     {{ job | tojson | safe }}
   </script>
-  <script src="/static/js/job.js?v=20261028_v2"></script>
+  <script src="/static/js/job.js?v=20261030_v5"></script>
 </body>
 </html>

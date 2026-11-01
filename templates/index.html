@@ -97,6 +97,17 @@
             </div>
           </div>
 
+          <!-- Speaker Mode Selection -->
+          <div class="form-group">
+            <label for="speaker_mode">Identificação de Locutores / Minutagem:</label>
+            <select id="speaker_mode" name="speaker_mode">
+              <option value="auto" selected>🤖 Automático (Classificar monólogo vs. diálogo com IA)</option>
+              <option value="single">🎙️ Orador Único (Aula, Palestra, Vídeo Solo, Tutorial - Evita dividir a mesma pessoa)</option>
+              <option value="dialogue">👥 Diálogo / Reunião (Entrevista, Ata de Reunião, Mesa Redonda)</option>
+            </select>
+            <span class="help-text">Selecione "Orador Único" para aulas e vídeos de uma só pessoa, garantindo que a fala não seja fragmentada em múltiplos locutores.</span>
+          </div>
+
           <!-- Target Languages Checkboxes -->
           <div class="form-group">
             <label>Idiomas de Saída (traduzido com IA):</label>
@@ -128,7 +139,15 @@
                 <span>📄 Texto corrido</span>
               </label>
               <label class="checkbox-label">
-                <input type="checkbox" name="output_formats" value="mp3">
+                <input type="checkbox" name="output_formats" value="discourse" checked>
+                <span>📖 Discurso (Texto fluido sem vícios de fala)</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="output_formats" value="video" checked>
+                <span>🎬 Vídeo Legendado (.MP4)</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" name="output_formats" value="mp3" checked>
                 <span>🎵 MP3</span>
               </label>
             </div>
